@@ -52,14 +52,22 @@ namespace cg::renderer
 			std::shared_ptr<resource<RT>> in_render_target,
 			std::shared_ptr<resource<float>> in_depth_buffer)
 	{
-		THROW_ERROR("Not implemented yet");
+		//THROW_ERROR("Not implemented yet");
+		render_target = in_render_target;
 	}
 
 	template<typename VB, typename RT>
 	inline void rasterizer<VB, RT>::clear_render_target(
 			const RT& in_clear_value, const float in_depth)
 	{
-		THROW_ERROR("Not implemented yet");
+		//THROW_ERROR("Not implemented yet");
+		if (render_target) {
+			for (size_t y = 0; y != height; ++y) {
+				for (size_t x = 0; x != width; ++x) {
+					render_target->item(x, y) = in_clear_value;
+				}
+			}
+		}
 	}
 
 	template<typename VB, typename RT>
@@ -79,7 +87,9 @@ namespace cg::renderer
 	template<typename VB, typename RT>
 	inline void rasterizer<VB, RT>::set_viewport(size_t in_width, size_t in_height)
 	{
-		THROW_ERROR("Not implemented yet");
+		//THROW_ERROR("Not implemented yet");
+		width = in_width;
+		height = in_height;
 	}
 
 	template<typename VB, typename RT>
