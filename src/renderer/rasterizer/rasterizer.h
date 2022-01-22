@@ -74,14 +74,16 @@ namespace cg::renderer
 	inline void rasterizer<VB, RT>::set_vertex_buffer(
 			std::shared_ptr<resource<VB>> in_vertex_buffer)
 	{
-		THROW_ERROR("Not implemented yet");
+		//THROW_ERROR("Not implemented yet");
+		vertex_buffer = in_vertex_buffer;
 	}
 
 	template<typename VB, typename RT>
 	inline void rasterizer<VB, RT>::set_index_buffer(
 			std::shared_ptr<resource<unsigned int>> in_index_buffer)
 	{
-		THROW_ERROR("Not implemented yet");
+		//THROW_ERROR("Not implemented yet");
+		index_buffer = in_index_buffer;
 	}
 
 	template<typename VB, typename RT>
