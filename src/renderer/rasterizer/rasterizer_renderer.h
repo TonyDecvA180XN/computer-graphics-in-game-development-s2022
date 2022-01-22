@@ -19,7 +19,5 @@ namespace cg::renderer
 		std::shared_ptr<cg::resource<float>> depth_buffer;
 
 		std::shared_ptr<cg::renderer::rasterizer<cg::vertex, cg::unsigned_color>> rasterizer;
-
-		std::vector<std::shared_ptr<cg::world::model>> models;
 	};
 }// namespace cg::renderer
