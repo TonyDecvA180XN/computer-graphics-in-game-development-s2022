@@ -160,6 +160,34 @@ namespace cg
 
 		float u;
 		float v;
+
+		vertex operator+(const vertex& other) const
+		{
+			vertex result{};
+			result.x = this->x + other.x;
+			result.y = this->y + other.y;
+			result.z = this->z + other.z;
+			result.nx = this->nx + other.nx;
+			result.ny = this->ny + other.ny;
+			result.nz = this->nz + other.nz;
+
+			// TODO: Add remaining parameters
+			return result;
+		}
+
+		vertex operator*(const float value) const
+		{
+			vertex result;
+			result.x = this->x * value;
+			result.y = this->y * value;
+			result.z = this->z * value;
+			result.nx = this->nx * value;
+			result.ny = this->ny * value;
+			result.nz = this->nz * value;
+
+			// TODO: Add remaining parameters
+			return result;
+		}
 	};
 
 }// namespace cg
