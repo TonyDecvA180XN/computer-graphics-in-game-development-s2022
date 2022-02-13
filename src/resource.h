@@ -158,6 +158,8 @@ namespace cg
 		float emissive_g;
 		float emissive_b;
 
+		float r;
+
 		float u;
 		float v;
 

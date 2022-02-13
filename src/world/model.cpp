@@ -63,9 +63,17 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 			if (index_map.count(index) == 0) {
 				const unsigned int local_index = static_cast<unsigned int>(vertex_accumulator.size());
 				vertex_accumulator.push_back(vertices[index]);
+
 				vertex_accumulator.back().diffuse_r = materials[mesh.material_ids[i / 3]].diffuse[0];
 				vertex_accumulator.back().diffuse_g = materials[mesh.material_ids[i / 3]].diffuse[1];
 				vertex_accumulator.back().diffuse_b = materials[mesh.material_ids[i / 3]].diffuse[2];
+
+				vertex_accumulator.back().ambient_r = materials[mesh.material_ids[i / 3]].ambient[0];
+				vertex_accumulator.back().ambient_g = materials[mesh.material_ids[i / 3]].ambient[1];
+				vertex_accumulator.back().ambient_b = materials[mesh.material_ids[i / 3]].ambient[2];
+
+				vertex_accumulator.back().r = materials[mesh.material_ids[i / 3]].roughness;
+
 				index_map[index] = local_index;
 			}
 		}

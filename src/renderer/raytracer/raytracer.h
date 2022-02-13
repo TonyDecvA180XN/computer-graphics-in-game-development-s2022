@@ -34,6 +34,7 @@ namespace cg::renderer
 	{
 		float depth;
 		DirectX::XMFLOAT3 position;
+		DirectX::XMFLOAT3 normal;
 		color color;
 
 		bool operator<(const payload& other) const
@@ -93,8 +94,16 @@ namespace cg::renderer
 
 	struct light
 	{
-		float3 position;
-		float3 color;
+		enum class light_type { POINT, SUN };
+
+		light(light_type type, DirectX::FXMVECTOR pos, DirectX::FXMVECTOR color) :
+			lt(type), position(pos), color(color)
+		{
+		}
+
+		light_type lt;
+		DirectX::XMVECTOR position; // direction if SUN light
+		DirectX::XMVECTOR color;
 	};
 
 
@@ -223,6 +232,11 @@ namespace cg::renderer
 		const DirectX::XMMATRIX projection = camera->get_projection_matrix();
 		const DirectX::XMVECTOR eye = camera->get_position();
 
+		std::vector<light> lights;
+		lights.push_back(light(light::light_type::POINT,
+							   DirectX::XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
+							   DirectX::XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f)));
+
 		for (size_t y = 0; y != height; ++y)
 		{
 			for (size_t x = 0; x != width; ++x)
@@ -240,7 +254,21 @@ namespace cg::renderer
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
 				{
-					render_target->item(x, y) = unsigned_color::from_color(p.color);
+					DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&p.normal);
+					normal = DirectX::XMVector3Normalize(normal);
+
+					DirectX::XMVECTOR surface = DirectX::XMLoadFloat3(&p.position);
+					DirectX::XMVECTOR light = DirectX::XMVectorSubtract(lights[0].position, surface);
+					light = DirectX::XMVector3Normalize(light);
+
+					float intensity = 0.1f + 0.9f * DirectX::XMMax(DirectX::XMVector3Dot(normal, light).m128_f32[0], 0.0f);
+
+					DirectX::XMVECTOR diffuse = DirectX::XMVectorScale(lights[0].color, intensity);
+					DirectX::XMFLOAT3 finalColor;
+					DirectX::XMStoreFloat3(&finalColor, diffuse);
+
+					float3 out(p.color.r * finalColor.x, p.color.g * finalColor.y, p.color.b * finalColor.z);
+					render_target->item(x, y) = unsigned_color::from_float3(out);
 				}
 			}
 		}
@@ -270,6 +298,9 @@ namespace cg::renderer
 					face.at(i) = DirectX::XMLoadFloat3(&address);
 					faceColor = color::from_float3(float3(vertex.diffuse_r, vertex.diffuse_g, vertex.diffuse_b));
 				}
+				DirectX::XMVECTOR normal = DirectX::XMVector3Cross(
+					DirectX::XMVectorSubtract(face.at(2), face.at(0)),
+					DirectX::XMVectorSubtract(face.at(1), face.at(0)));
 
 				float distance;
 				if (DirectX::TriangleTests::Intersects(
@@ -284,6 +315,7 @@ namespace cg::renderer
 						payload hit;
 						hit.depth = distance;
 						DirectX::XMStoreFloat3(&hit.position, hitPoint);
+						DirectX::XMStoreFloat3(&hit.normal, normal);
 						hit.color = faceColor;
 						//hit.color = color::from_float3(float3(&hit.position.x));
 
