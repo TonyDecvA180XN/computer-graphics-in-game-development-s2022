@@ -22,10 +22,12 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 {
 	//THROW_ERROR("Not implemented yet");
 	std::string error_message, warning_message;
+	std::filesystem::path dir = model_path;
+	dir.remove_filename();
 	const bool status = LoadObj(&attrib, &shapes, &materials,
 	                            &warning_message, &error_message,
 	                            model_path.generic_string().c_str(),
-	                            nullptr, true);
+	                            dir.generic_string().c_str(), true);
 
 	if (warning_message.size()) {
 		std::cerr << "Warning: " << warning_message << std::endl;
@@ -43,6 +45,10 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 		current_vertex.x = attrib.vertices.at(3 * i + 0);
 		current_vertex.y = attrib.vertices.at(3 * i + 1);
 		current_vertex.z = attrib.vertices.at(3 * i + 2);
+
+		//current_vertex.diffuse_r = attrib.colors.at(3 * i + 0);
+		//current_vertex.diffuse_g = attrib.colors.at(3 * i + 1);
+		//current_vertex.diffuse_b = attrib.colors.at(3 * i + 2);
 	}
 
 	// Process each shape
@@ -57,6 +63,9 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 			if (index_map.count(index) == 0) {
 				const unsigned int local_index = static_cast<unsigned int>(vertex_accumulator.size());
 				vertex_accumulator.push_back(vertices[index]);
+				vertex_accumulator.back().diffuse_r = materials[mesh.material_ids[i / 3]].diffuse[0];
+				vertex_accumulator.back().diffuse_g = materials[mesh.material_ids[i / 3]].diffuse[1];
+				vertex_accumulator.back().diffuse_b = materials[mesh.material_ids[i / 3]].diffuse[2];
 				index_map[index] = local_index;
 			}
 		}

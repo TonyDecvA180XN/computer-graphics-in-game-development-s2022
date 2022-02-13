@@ -7,6 +7,11 @@
 #include <memory>
 #include <omp.h>
 #include <random>
+#include "world/camera.h"
+#include "DirectXMath.h"
+#include "DirectXCollision.h"
+
+#include <set>
 
 using namespace linalg::aliases;
 
@@ -14,22 +19,31 @@ namespace cg::renderer
 {
 	struct ray
 	{
-		ray(float3 position, float3 direction) : position(position)
+		ray(DirectX::FXMVECTOR pos, DirectX::FXMVECTOR dir) : position(pos),
+															  direction(DirectX::XMVector3Normalize(dir))
 		{
-			this->direction = normalize(direction);
+			// TODO: test DirectX::XMVector3NormalizeEst
 		}
-		float3 position;
-		float3 direction;
+
+		DirectX::XMVECTOR position;
+		DirectX::XMVECTOR direction;
 	};
+
 
 	struct payload
 	{
-		float t;
-		float3 bary;
-		cg::color color;
+		float depth;
+		DirectX::XMFLOAT3 position;
+		color color;
+
+		bool operator<(const payload& other) const
+		{
+			return depth < other.depth;
+		}
 	};
 
-	template<typename VB>
+
+	template <typename VB>
 	struct triangle
 	{
 		triangle(const VB& vertex_a, const VB& vertex_b, const VB& vertex_c);
@@ -50,19 +64,23 @@ namespace cg::renderer
 		float3 emissive;
 	};
 
-	template<typename VB>
+
+	template <typename VB>
 	inline triangle<VB>::triangle(
-			const VB& vertex_a, const VB& vertex_b, const VB& vertex_c)
+		const VB& vertex_a, const VB& vertex_b, const VB& vertex_c)
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-	template<typename VB>
+
+	template <typename VB>
 	class aabb
 	{
 	public:
 		void add_triangle(const triangle<VB> triangle);
+
 		const std::vector<triangle<VB>>& get_triangles() const;
+
 		bool aabb_test(const ray& ray) const;
 
 	protected:
@@ -72,38 +90,54 @@ namespace cg::renderer
 		float3 aabb_max;
 	};
 
+
 	struct light
 	{
 		float3 position;
 		float3 color;
 	};
 
-	template<typename VB, typename RT>
+
+	template <typename VB, typename RT>
 	class raytracer
 	{
 	public:
-		raytracer(){};
-		~raytracer(){};
+		raytracer()
+		{
+		}
+
+		~raytracer()
+		{
+		}
 
 		void set_render_target(std::shared_ptr<resource<RT>> in_render_target);
-		void clear_render_target(const RT& in_clear_value);
+
+		void clear_render_target();
+
 		void set_viewport(size_t in_width, size_t in_height);
 
+		void set_camera(std::shared_ptr<cg::world::camera> in_camera);
+
 		void set_vertex_buffers(std::vector<std::shared_ptr<cg::resource<VB>>> in_vertex_buffers);
+
 		void set_index_buffers(std::vector<std::shared_ptr<cg::resource<unsigned int>>> in_index_buffers);
+
 		void build_acceleration_structure();
+
 		std::vector<aabb<VB>> acceleration_structures;
 
-		void ray_generation(float3 position, float3 direction, float3 right, float3 up, size_t depth, size_t accumulation_num);
+		void ray_generation(size_t depth,
+							size_t accumulation_num);
 
-		payload trace_ray(const ray& ray, size_t depth, float max_t = 1000.f, float min_t = 0.001f) const;
+		bool trace_ray(const ray& ray, float max_t, float min_t, payload& payload) const;
+
 		payload intersection_shader(const triangle<VB>& triangle, const ray& ray) const;
 
 		std::function<payload(const ray& ray)> miss_shader = nullptr;
 		std::function<payload(const ray& ray, payload& payload, const triangle<VB>& triangle, size_t depth)>
-				closest_hit_shader = nullptr;
+		closest_hit_shader = nullptr;
 		std::function<payload(const ray& ray, payload& payload, const triangle<VB>& triangle)> any_hit_shader =
-				nullptr;
+			nullptr;
 
 		float2 get_jitter(int frame_id);
 
@@ -113,88 +147,187 @@ namespace cg::renderer
 		std::vector<std::shared_ptr<cg::resource<unsigned int>>> index_buffers;
 		std::vector<std::shared_ptr<cg::resource<VB>>> vertex_buffers;
 
+		std::shared_ptr<cg::world::camera> camera;
+
 		size_t width = 1920;
 		size_t height = 1080;
 	};
 
-	template<typename VB, typename RT>
+
+	template <typename VB, typename RT>
 	inline void raytracer<VB, RT>::set_render_target(
-			std::shared_ptr<resource<RT>> in_render_target)
+		std::shared_ptr<resource<RT>> in_render_target)
 	{
-		THROW_ERROR("Not implemented yet");
+		render_target = in_render_target;
 	}
 
-	template<typename VB, typename RT>
-	inline void raytracer<VB, RT>::clear_render_target(const RT& in_clear_value)
+	template <typename VB, typename RT>
+	inline void raytracer<VB, RT>::clear_render_target()
 	{
-		THROW_ERROR("Not implemented yet");
+		if (render_target)
+		{
+			for (size_t y = 0; y != height; ++y)
+			{
+				for (size_t x = 0; x != width; ++x)
+				{
+					render_target->item(x, y) = unsigned_color::from_float3({
+						static_cast<float>(x) / width,
+						static_cast<float>(y) / height,
+						1.0
+					});
+				}
+			}
+		}
 	}
-	template<typename VB, typename RT>
+
+	template <typename VB, typename RT>
 	void raytracer<VB, RT>::set_index_buffers(std::vector<std::shared_ptr<cg::resource<unsigned int>>> in_index_buffers)
 	{
-		THROW_ERROR("Not implemented yet");
-	}
-	template<typename VB, typename RT>
-	inline void raytracer<VB, RT>::set_vertex_buffers(std::vector<std::shared_ptr<cg::resource<VB>>> in_vertex_buffers)
-	{
-		THROW_ERROR("Not implemented yet");
+		index_buffers = in_index_buffers;
 	}
 
-	template<typename VB, typename RT>
+	template <typename VB, typename RT>
+	inline void raytracer<VB, RT>::set_vertex_buffers(std::vector<std::shared_ptr<cg::resource<VB>>> in_vertex_buffers)
+	{
+		vertex_buffers = in_vertex_buffers;
+	}
+
+	template <typename VB, typename RT>
 	inline void raytracer<VB, RT>::build_acceleration_structure()
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-	template<typename VB, typename RT>
+	template <typename VB, typename RT>
 	inline void raytracer<VB, RT>::set_viewport(size_t in_width, size_t in_height)
 	{
-		THROW_ERROR("Not implemented yet");
+		width = in_width;
+		height = in_height;
 	}
 
-	template<typename VB, typename RT>
-	inline void raytracer<VB, RT>::ray_generation(float3 position, float3 direction, float3 right, float3 up, size_t depth, size_t accumulation_num)
+	template <typename VB, typename RT>
+	void cg::renderer::raytracer<VB, RT>::set_camera(std::shared_ptr<cg::world::camera> in_camera)
 	{
-		THROW_ERROR("Not implemented yet");
+		camera = in_camera;
 	}
 
-	template<typename VB, typename RT>
-	inline payload raytracer<VB, RT>::trace_ray(
-			const ray& ray, size_t depth, float max_t, float min_t) const
+	template <typename VB, typename RT>
+	inline void raytracer<VB, RT>::ray_generation(size_t depth, size_t accumulation_num)
 	{
-		THROW_ERROR("Not implemented yet");
+		const float h = static_cast<float>(height);
+		const float w = static_cast<float>(width);
+		const float minZ = camera->get_z_near();
+		const float maxZ = camera->get_z_far();
+		const DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+		const DirectX::XMMATRIX view = camera->get_view_matrix();
+		const DirectX::XMMATRIX projection = camera->get_projection_matrix();
+		const DirectX::XMVECTOR eye = camera->get_position();
+
+		for (size_t y = 0; y != height; ++y)
+		{
+			for (size_t x = 0; x != width; ++x)
+			{
+				const float fx = static_cast<float>(x);
+				const float fy = static_cast<float>(y);
+				DirectX::XMVECTOR pixel = DirectX::XMVectorSet(fx, fy, 1.0f, 0.0f);
+				DirectX::XMVECTOR direction = XMVector3Unproject(pixel,
+																 0.0f, 0.0f, w, h,
+																 0.0f, 1.0f,
+																 projection, view, world);
+
+				ray r(eye, direction);
+
+				payload p;
+				if (trace_ray(r, maxZ, minZ, p))
+				{
+					render_target->item(x, y) = unsigned_color::from_color(p.color);
+				}
+			}
+		}
 	}
 
-	template<typename VB, typename RT>
+	template <typename VB, typename RT>
+	inline bool raytracer<VB, RT>::trace_ray(
+		const ray& ray, float max_t, float min_t, payload& outPayload) const
+	{
+		std::set<payload> hits;
+
+		for (size_t modelIdx = 0; modelIdx != index_buffers.size(); ++modelIdx)
+		{
+			const size_t numIndices = index_buffers.at(modelIdx)->get_number_of_elements();
+			const size_t numFaces = numIndices / 3;
+
+			for (size_t faceIdx = 0; faceIdx != numFaces; ++faceIdx)
+			{
+				// Extract triangle
+				std::array<DirectX::XMVECTOR, 3> face;
+				color faceColor = color::from_float3(float3(1.0f, 0.0f, 1.0f));
+				for (size_t i = 0; i != 3; ++i)
+				{
+					const unsigned index = index_buffers.at(modelIdx)->item(3 * faceIdx + i);
+					const vertex& vertex = vertex_buffers.at(modelIdx)->item(index);
+					const DirectX::XMFLOAT3 address(vertex.x, vertex.y, vertex.z);
+					face.at(i) = DirectX::XMLoadFloat3(&address);
+					faceColor = color::from_float3(float3(vertex.diffuse_r, vertex.diffuse_g, vertex.diffuse_b));
+				}
+
+				float distance;
+				if (DirectX::TriangleTests::Intersects(
+					ray.position, ray.direction, face.at(0), face.at(1), face.at(2), distance))
+				{
+					if (distance >= min_t && distance <= max_t)
+					{
+						const DirectX::XMVECTOR hitPoint = DirectX::XMVectorAdd(
+							ray.position,
+							DirectX::XMVectorScale(ray.direction, distance));
+
+						payload hit;
+						hit.depth = distance;
+						DirectX::XMStoreFloat3(&hit.position, hitPoint);
+						hit.color = faceColor;
+						//hit.color = color::from_float3(float3(&hit.position.x));
+
+						hits.insert(hit);
+					}
+				}
+			}
+		}
+
+		if (hits.size())
+		{
+			outPayload = *hits.begin();
+		}
+		return !hits.empty();
+	}
+
+	template <typename VB, typename RT>
 	inline payload raytracer<VB, RT>::intersection_shader(
-			const triangle<VB>& triangle, const ray& ray) const
+		const triangle<VB>& triangle, const ray& ray) const
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-	template<typename VB, typename RT>
+	template <typename VB, typename RT>
 	float2 raytracer<VB, RT>::get_jitter(int frame_id)
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-
-	template<typename VB>
+	template <typename VB>
 	inline void aabb<VB>::add_triangle(const triangle<VB> triangle)
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-	template<typename VB>
+	template <typename VB>
 	inline const std::vector<triangle<VB>>& aabb<VB>::get_triangles() const
 	{
 		THROW_ERROR("Not implemented yet");
 	}
 
-	template<typename VB>
+	template <typename VB>
 	inline bool aabb<VB>::aabb_test(const ray& ray) const
 	{
 		THROW_ERROR("Not implemented yet");
 	}
-
-}// namespace cg::renderer
+} // namespace cg::renderer

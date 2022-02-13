@@ -70,7 +70,7 @@ const DirectX::XMMATRIX cg::world::camera::get_view_matrix() const
 {
 	//THROW_ERROR("Not implemented yet");
 
-	return DirectX::XMMatrixLookToLH(get_position(), get_direction(), DirectX::XMVectorSet(0, -1, 0, 0));
+	return DirectX::XMMatrixLookToLH(get_position(), get_direction(), DirectX::XMVectorSet(0, 1, 0, 0));
 }
 
 #ifdef DX12
@@ -90,7 +90,7 @@ const DirectX::XMMATRIX cg::world::camera::get_dxm_projection_matrix() const
 const DirectX::XMMATRIX cg::world::camera::get_projection_matrix() const
 {
 	//THROW_ERROR("Not implemented yet");
-	const DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(angle_of_view, width / height, z_far, z_near );
+	const DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(angle_of_view, width / height, z_near, z_far);
 	return projection;
 }
 
@@ -139,4 +139,14 @@ const float camera::get_phi() const
 {
 	//THROW_ERROR("Not implemented yet");
 	return phi;
+}
+
+const float camera::get_z_near() const
+{
+	return z_near;
+}
+
+const float camera::get_z_far() const
+{
+	return z_far;
 }

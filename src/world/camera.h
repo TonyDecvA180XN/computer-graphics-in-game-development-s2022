@@ -37,6 +37,8 @@ namespace cg::world
 		const DirectX::XMVECTOR get_up() const;
 		const float get_theta() const;
 		const float get_phi() const;
+		const float get_z_near() const;
+		const float get_z_far() const;
 
 	protected:
 		float3 position;

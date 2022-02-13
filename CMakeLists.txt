@@ -61,4 +61,6 @@ target_include_directories(DirectX12 PRIVATE ${INCLUDE})
 target_link_libraries(DirectX12 d3d12.lib dxgi.lib d3dcompiler.lib dxguid.lib)
 # Copy shader as a source to the binary directory
 configure_file(shaders/shaders.hlsl ${CMAKE_CURRENT_BINARY_DIR}/shaders.hlsl COPYONLY)
-set_property(TARGET DirectX12 PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+set_target_properties(Rasterization PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+set_target_properties(Raytracing PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+set_target_properties(DirectX12 PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
