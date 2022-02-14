@@ -39,7 +39,7 @@ namespace DirectX
 		return result;
 	}
 
-	inline XMVECTOR XMVectorDotPositive(FXMVECTOR a, FXMVECTOR b)
+	inline XMVECTOR XMVectorDotUnsigned(FXMVECTOR a, FXMVECTOR b)
 	{
 		return XMVectorClamp(XMVector3Dot(a, b), XMVectorZero(), XMVectorSplatOne());
 	}
@@ -160,7 +160,7 @@ namespace cg::renderer
 		void ray_generation(size_t depth,
 							size_t accumulation_num);
 
-		bool trace_ray(const ray& ray, float max_t, float min_t, payload& payload) const;
+		bool trace_ray(const ray& ray, float max_t, float min_t, payload& payload, bool bIsShadowRay = false) const;
 
 		payload intersection_shader(const triangle<VB>& triangle, const ray& ray) const;
 
@@ -258,7 +258,7 @@ namespace cg::renderer
 
 		std::vector<light> lights;
 		lights.push_back({
-			XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
+			XMVectorSet(0.0f, 1.925f, 0.0f, 1.0f),
 			XMVectorSet(0.25f, 0.25f, 0.25f, 1.0f),
 			XMVectorSet(0.75f, 0.75f, 0.75f, 1.0f),
 			XMVectorSet(0.4f, 0.4f, 0.4f, 1.0f)
@@ -292,12 +292,13 @@ namespace cg::renderer
 					{
 						const XMVECTOR address = XMLoadFloat3(&p.point.position);
 						const XMVECTOR surfaceNormal = XMLoadFloat3(&p.point.normal);
-						const XMVECTOR incomingLight = XMVector3Normalize(XMVectorSubtract(l.position, address));
-						const XMVECTOR incident = XMVectorScale(incomingLight, -1.0f);
+						const XMVECTOR lightVector = XMVectorSubtract(l.position, address);
+						const XMVECTOR lightDir = XMVector3Normalize(lightVector);
+						const XMVECTOR incident = XMVectorScale(lightDir, -1.0f);
 						const XMVECTOR reflectedLight = XMVector3Reflect(incident, surfaceNormal);
 						const XMVECTOR cameraDir = XMVector3Normalize(XMVectorSubtract(eye, address));
-						const XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
-
+						XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
+						XMVECTOR shadow = XMVectorSplatOne();
 
 						if (USE_AMBIENT)
 						{
@@ -307,44 +308,57 @@ namespace cg::renderer
 							totalIntensity = XMVectorAdd(totalIntensity, ambientComponent);
 						}
 
+						// skip backfaces during lighting
+						if (XMVectorGetX(XMVector3Dot(lightDir, surfaceNormal)) < 0.0f)
+						{
+							continue;
+						}
+
+						// trace shadow
+						const XMVECTOR offsetPosition = XMVectorAdd(address, XMVectorScale(surfaceNormal, 0.001f));
+						ray lightRay(address, lightDir);
+						payload shadowPayload;
+						const bool bIsShadow = trace_ray(lightRay, XMVectorGetX(XMVector3Length(lightVector)), 0.0001f,
+														 shadowPayload, true);
+						if (bIsShadow)
+						{
+							shadow = XMVectorReplicate(0.5f);
+							shadow = XMVectorClamp(shadow, XMVectorZero(), XMVectorSplatOne());
+						}
+
 						if (USE_DIFFUSE)
 						{
 							// add diffuse component
-							const XMVECTOR materialDiffuse = XMLoadFloat3(&p.point.diffuse);
-							const XMVECTOR diffuseComponent = XMColorModulate(
-								materialDiffuse,
-								XMColorModulate(XMVectorDotPositive(incomingLight, surfaceNormal), l.duffuse));
+							const XMVECTOR materialDiffuse = XMLoadFloat3(&shadowPayload.point.diffuse);
+							XMVECTOR diffuseComponent = XMVectorDotUnsigned(lightDir, surfaceNormal);
+							diffuseComponent = XMColorModulate(diffuseComponent, l.duffuse);
+							diffuseComponent = XMColorModulate(diffuseComponent, shadow);
+							diffuseComponent = XMColorModulate(diffuseComponent, materialDiffuse);
+
 							totalIntensity = XMVectorAdd(totalIntensity, diffuseComponent);
 						}
 
-						if (USE_SPECULAR)
+						// add specular component
+						if (!bIsShadow && USE_SPECULAR)
 						{
+							// Cornell box does not have material specular value
+							//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
+							const XMVECTOR materialSpecular = XMVectorSplatOne();
+							XMVECTOR specularComponent;
 							if (USE_BLINN_LIGHTING)
 							{
-								// add specular component
-								//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
-								const XMVECTOR materialSpecular = XMVectorSplatOne();
-								const XMVECTOR raisedShininess = XMVectorScale(shininess, 0.25f);
-								const XMVECTOR halfDir = XMVector3Normalize(XMVectorAdd(incomingLight, cameraDir));
-								const XMVECTOR specularComponent = XMColorModulate(
-									materialSpecular,
-									XMColorModulate(
-										XMVectorPow(XMVectorDotPositive(surfaceNormal, halfDir), raisedShininess),
-										l.specular));
-								totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+								shininess = XMVectorScale(shininess, 0.25f);
+								const XMVECTOR halfDir = XMVector3Normalize(XMVectorAdd(lightDir, cameraDir));
+								specularComponent = XMVectorDotUnsigned(surfaceNormal, halfDir);
 							}
 							else
 							{
-								// add specular component
-								//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
-								const XMVECTOR materialSpecular = XMVectorSplatOne();
-								const XMVECTOR specularComponent = XMColorModulate(
-									materialSpecular,
-									XMColorModulate(
-										XMVectorPow(XMVectorDotPositive(reflectedLight, cameraDir), shininess),
-										l.specular));
-								totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+								specularComponent = XMVectorDotUnsigned(reflectedLight, cameraDir);
 							}
+							specularComponent = XMVectorPow(specularComponent, shininess);
+							specularComponent = XMColorModulate(specularComponent, materialSpecular);
+							specularComponent = XMColorModulate(specularComponent, l.specular);
+							totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
 						}
 					}
 					XMFLOAT3 output;
@@ -358,7 +372,7 @@ namespace cg::renderer
 
 	template <typename VB, typename RT>
 	inline bool raytracer<VB, RT>::trace_ray(
-		const ray& ray, float max_t, float min_t, payload& outPayload) const
+		const ray& ray, float max_t, float min_t, payload& outPayload, const bool bIsShadowRay) const
 	{
 		using namespace DirectX;
 		std::set<payload> hits;
@@ -390,6 +404,11 @@ namespace cg::renderer
 				{
 					if (t >= min_t && t <= max_t)
 					{
+						if (bIsShadowRay)
+						{
+							outPayload.depth = t;
+							return true;
+						}
 						const XMVECTOR hitPoint = XMVectorAdd(ray.position, XMVectorScale(ray.direction, t));
 
 						const XMVECTOR barycentric = XMFindBarycentric(hitPoint, triangle.at(0), triangle.at(1), triangle.at(2));
