@@ -61,6 +61,7 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 
 				vertex_accumulator.back().diffuse = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].diffuse);
 				vertex_accumulator.back().ambient = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].ambient);
+				vertex_accumulator.back().specular = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].specular);
 				vertex_accumulator.back().emissive = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].emission);
 
 				vertex_accumulator.back().shininess = materials[mesh.material_ids[i / 3]].shininess;

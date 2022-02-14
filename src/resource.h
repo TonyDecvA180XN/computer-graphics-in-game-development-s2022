@@ -150,6 +150,7 @@ namespace cg
 
 		DirectX::XMFLOAT3 ambient;
 		DirectX::XMFLOAT3 diffuse;
+		DirectX::XMFLOAT3 specular;
 
 		DirectX::XMFLOAT3 emissive;
 		
@@ -173,6 +174,9 @@ namespace cg
 
 			converter = XMVectorAdd(XMLoadFloat3(&diffuse), XMLoadFloat3(&other.diffuse));
 			XMStoreFloat3(&result.diffuse, converter);
+
+			converter = XMVectorAdd(XMLoadFloat3(&specular), XMLoadFloat3(&other.specular));
+			XMStoreFloat3(&result.specular, converter);
 
 			converter = XMVectorAdd(XMLoadFloat3(&emissive), XMLoadFloat3(&other.emissive));
 			XMStoreFloat3(&result.emissive, converter);
@@ -201,6 +205,9 @@ namespace cg
 
 			converter = XMVectorScale(XMLoadFloat3(&diffuse), value);
 			XMStoreFloat3(&result.diffuse, converter);
+
+			converter = XMVectorScale(XMLoadFloat3(&specular), value);
+			XMStoreFloat3(&result.specular, converter);
 
 			converter = XMVectorScale(XMLoadFloat3(&emissive), value);
 			XMStoreFloat3(&result.emissive, converter);

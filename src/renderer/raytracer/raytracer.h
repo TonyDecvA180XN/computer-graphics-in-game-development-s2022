@@ -38,6 +38,11 @@ namespace DirectX
 									  0.0f);
 		return result;
 	}
+
+	inline XMVECTOR XMVectorDotPositive(FXMVECTOR a, FXMVECTOR b)
+	{
+		return XMVectorClamp(XMVector3Dot(a, b), XMVectorZero(), XMVectorSplatOne());
+	}
 }
 
 namespace cg::renderer
@@ -117,11 +122,10 @@ namespace cg::renderer
 
 	struct light
 	{
-		light(DirectX::XMVECTOR pos, DirectX::XMVECTOR col) : position(pos), color(col)
-		{
-		}
-		DirectX::XMVECTOR position; // direction if SUN light
-		DirectX::XMVECTOR color;
+		DirectX::XMVECTOR position;
+		DirectX::XMVECTOR specular;
+		DirectX::XMVECTOR duffuse;
+		DirectX::XMVECTOR ambient;
 	};
 
 
@@ -253,8 +257,12 @@ namespace cg::renderer
 		const XMVECTOR eye = camera->get_position();
 
 		std::vector<light> lights;
-		lights.emplace_back(XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
-							XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f));
+		lights.push_back({
+			XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
+			XMVectorSet(0.25f, 0.25f, 0.25f, 1.0f),
+			XMVectorSet(0.75f, 0.75f, 0.75f, 1.0f),
+			XMVectorSet(0.3f, 0.3f, 0.3f, 1.0f)
+		});
 
 		for (size_t y = 0; y != height; ++y)
 		{
@@ -273,19 +281,57 @@ namespace cg::renderer
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
 				{
-					XMVECTOR normal = XMLoadFloat3(&p.point.normal);
-					normal = XMVector3Normalize(normal);
+					// Use this switch to enable Blinn-Phong or just Phong lighting
+					constexpr bool USE_BLINN_LIGHTING = false;
+					constexpr bool USE_AMBIENT = true;
+					constexpr bool USE_DIFFUSE = true;
+					constexpr bool USE_SPECULAR = true;
 
-					XMVECTOR surface = XMLoadFloat3(&p.point.position);
-					XMVECTOR light = XMVectorSubtract(lights[0].position, surface);
-					light = XMVector3Normalize(light);
+					XMVECTOR totalIntensity = XMVectorZero();
+					for (const light& l : lights)
+					{
+						const XMVECTOR address = XMLoadFloat3(&p.point.position);
+						const XMVECTOR surfaceNormal = XMLoadFloat3(&p.point.normal);
+						const XMVECTOR incomingLight = XMVector3Normalize(XMVectorSubtract(l.position, address));
+						const XMVECTOR incident = XMVectorScale(incomingLight, -1.0f);
+						const XMVECTOR reflectedLight = XMVector3Reflect(incident, surfaceNormal);
+						const XMVECTOR cameraDir = XMVector3Normalize(XMVectorSubtract(eye, address));
+						const XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
 
-					float intensity = 0.1f + 0.9f * XMMax(XMVector3Dot(normal, light).m128_f32[0], 0.0f);
 
-					XMVECTOR diffuse = XMVectorScale(lights[0].color, intensity);
-					XMVECTOR finalColor = XMColorModulate(diffuse, XMLoadFloat3(&p.point.diffuse));
+						if (USE_AMBIENT)
+						{
+							// add ambient component
+							const XMVECTOR materialAmbient = XMLoadFloat3(&p.point.ambient);
+							const XMVECTOR ambientComponent = XMColorModulate(l.ambient, materialAmbient);
+							totalIntensity = XMVectorAdd(totalIntensity, ambientComponent);
+						}
+
+						if (USE_DIFFUSE)
+						{
+							// add diffuse component
+							const XMVECTOR materialDiffuse = XMLoadFloat3(&p.point.diffuse);
+							const XMVECTOR diffuseComponent = XMColorModulate(
+								materialDiffuse,
+								XMColorModulate(XMVectorDotPositive(incomingLight, surfaceNormal), l.duffuse));
+							totalIntensity = XMVectorAdd(totalIntensity, diffuseComponent);
+						}
+
+						if (USE_SPECULAR)
+						{
+							// add specular component
+							//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
+							const XMVECTOR materialSpecular = XMVectorSplatOne();
+							const XMVECTOR specularComponent = XMColorModulate(
+								materialSpecular,
+								XMColorModulate(
+									XMVectorPow(XMVectorDotPositive(reflectedLight, cameraDir), shininess),
+									l.specular));
+							totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+						}
+					}
 					XMFLOAT3 output;
-					XMStoreFloat3(&output, finalColor);
+					XMStoreFloat3(&output, totalIntensity);
 
 					render_target->item(x, y) = unsigned_color::from_color(color::from_XMFLOAT3(output));
 				}
