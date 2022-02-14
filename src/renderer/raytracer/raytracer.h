@@ -15,6 +15,31 @@
 
 using namespace linalg::aliases;
 
+namespace DirectX
+{
+	inline XMVECTOR XMTriangleAreaTwice(FXMVECTOR a, FXMVECTOR b)
+	{
+		return XMVector3Length(XMVector3Cross(a, b));
+	}
+
+	inline XMVECTOR XMFindBarycentric(FXMVECTOR p, FXMVECTOR v0, FXMVECTOR v1, GXMVECTOR v2)
+	{
+		XMVECTOR v0v1 = XMVectorSubtract(v1, v0);
+		XMVECTOR v0v2 = XMVectorSubtract(v2, v0);
+		XMVECTOR area = XMTriangleAreaTwice(v0v1, v0v2);
+
+		XMVECTOR pv0 = XMVectorSubtract(v0, p);
+		XMVECTOR pv1 = XMVectorSubtract(v1, p);
+		XMVECTOR pv2 = XMVectorSubtract(v2, p);
+
+		XMVECTOR result = XMVectorSet(XMVectorGetX(XMVectorDivide(XMTriangleAreaTwice(pv1, pv2), area)),
+									  XMVectorGetX(XMVectorDivide(XMTriangleAreaTwice(pv0, pv2), area)),
+									  XMVectorGetX(XMVectorDivide(XMTriangleAreaTwice(pv0, pv1), area)),
+									  0.0f);
+		return result;
+	}
+}
+
 namespace cg::renderer
 {
 	struct ray
@@ -33,9 +58,7 @@ namespace cg::renderer
 	struct payload
 	{
 		float depth;
-		DirectX::XMFLOAT3 position;
-		DirectX::XMFLOAT3 normal;
-		color color;
+		vertex point;
 
 		bool operator<(const payload& other) const
 		{
@@ -94,14 +117,9 @@ namespace cg::renderer
 
 	struct light
 	{
-		enum class light_type { POINT, SUN };
-
-		light(light_type type, DirectX::FXMVECTOR pos, DirectX::FXMVECTOR color) :
-			lt(type), position(pos), color(color)
+		light(DirectX::XMVECTOR pos, DirectX::XMVECTOR col) : position(pos), color(col)
 		{
 		}
-
-		light_type lt;
 		DirectX::XMVECTOR position; // direction if SUN light
 		DirectX::XMVECTOR color;
 	};
@@ -125,11 +143,11 @@ namespace cg::renderer
 
 		void set_viewport(size_t in_width, size_t in_height);
 
-		void set_camera(std::shared_ptr<cg::world::camera> in_camera);
+		void set_camera(std::shared_ptr<world::camera> in_camera);
 
-		void set_vertex_buffers(std::vector<std::shared_ptr<cg::resource<VB>>> in_vertex_buffers);
+		void set_vertex_buffers(std::vector<std::shared_ptr<resource<VB>>> in_vertex_buffers);
 
-		void set_index_buffers(std::vector<std::shared_ptr<cg::resource<unsigned int>>> in_index_buffers);
+		void set_index_buffers(std::vector<std::shared_ptr<resource<unsigned int>>> in_index_buffers);
 
 		void build_acceleration_structure();
 
@@ -151,12 +169,12 @@ namespace cg::renderer
 		float2 get_jitter(int frame_id);
 
 	protected:
-		std::shared_ptr<cg::resource<RT>> render_target;
-		std::shared_ptr<cg::resource<float3>> history;
-		std::vector<std::shared_ptr<cg::resource<unsigned int>>> index_buffers;
-		std::vector<std::shared_ptr<cg::resource<VB>>> vertex_buffers;
+		std::shared_ptr<resource<RT>> render_target;
+		std::shared_ptr<resource<float3>> history;
+		std::vector<std::shared_ptr<resource<unsigned int>>> index_buffers;
+		std::vector<std::shared_ptr<resource<VB>>> vertex_buffers;
 
-		std::shared_ptr<cg::world::camera> camera;
+		std::shared_ptr<world::camera> camera;
 
 		size_t width = 1920;
 		size_t height = 1080;
@@ -190,13 +208,13 @@ namespace cg::renderer
 	}
 
 	template <typename VB, typename RT>
-	void raytracer<VB, RT>::set_index_buffers(std::vector<std::shared_ptr<cg::resource<unsigned int>>> in_index_buffers)
+	void raytracer<VB, RT>::set_index_buffers(std::vector<std::shared_ptr<resource<unsigned int>>> in_index_buffers)
 	{
 		index_buffers = in_index_buffers;
 	}
 
 	template <typename VB, typename RT>
-	inline void raytracer<VB, RT>::set_vertex_buffers(std::vector<std::shared_ptr<cg::resource<VB>>> in_vertex_buffers)
+	inline void raytracer<VB, RT>::set_vertex_buffers(std::vector<std::shared_ptr<resource<VB>>> in_vertex_buffers)
 	{
 		vertex_buffers = in_vertex_buffers;
 	}
@@ -215,7 +233,7 @@ namespace cg::renderer
 	}
 
 	template <typename VB, typename RT>
-	void cg::renderer::raytracer<VB, RT>::set_camera(std::shared_ptr<cg::world::camera> in_camera)
+	void raytracer<VB, RT>::set_camera(std::shared_ptr<world::camera> in_camera)
 	{
 		camera = in_camera;
 	}
@@ -223,19 +241,20 @@ namespace cg::renderer
 	template <typename VB, typename RT>
 	inline void raytracer<VB, RT>::ray_generation(size_t depth, size_t accumulation_num)
 	{
+		using namespace DirectX;
+
 		const float h = static_cast<float>(height);
 		const float w = static_cast<float>(width);
 		const float minZ = camera->get_z_near();
 		const float maxZ = camera->get_z_far();
-		const DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
-		const DirectX::XMMATRIX view = camera->get_view_matrix();
-		const DirectX::XMMATRIX projection = camera->get_projection_matrix();
-		const DirectX::XMVECTOR eye = camera->get_position();
+		const XMMATRIX world = XMMatrixIdentity();
+		const XMMATRIX view = camera->get_view_matrix();
+		const XMMATRIX projection = camera->get_projection_matrix();
+		const XMVECTOR eye = camera->get_position();
 
 		std::vector<light> lights;
-		lights.push_back(light(light::light_type::POINT,
-							   DirectX::XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
-							   DirectX::XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f)));
+		lights.emplace_back(XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
+							XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f));
 
 		for (size_t y = 0; y != height; ++y)
 		{
@@ -243,32 +262,32 @@ namespace cg::renderer
 			{
 				const float fx = static_cast<float>(x);
 				const float fy = static_cast<float>(y);
-				DirectX::XMVECTOR pixel = DirectX::XMVectorSet(fx, fy, 1.0f, 0.0f);
-				DirectX::XMVECTOR direction = XMVector3Unproject(pixel,
-																 0.0f, 0.0f, w, h,
-																 0.0f, 1.0f,
-																 projection, view, world);
+				XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
+				XMVECTOR direction = XMVector3Unproject(pixel,
+														0.0f, 0.0f, w, h,
+														0.0f, 1.0f,
+														projection, view, world);
 
 				ray r(eye, direction);
 
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
 				{
-					DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&p.normal);
-					normal = DirectX::XMVector3Normalize(normal);
+					XMVECTOR normal = XMLoadFloat3(&p.point.normal);
+					normal = XMVector3Normalize(normal);
 
-					DirectX::XMVECTOR surface = DirectX::XMLoadFloat3(&p.position);
-					DirectX::XMVECTOR light = DirectX::XMVectorSubtract(lights[0].position, surface);
-					light = DirectX::XMVector3Normalize(light);
+					XMVECTOR surface = XMLoadFloat3(&p.point.position);
+					XMVECTOR light = XMVectorSubtract(lights[0].position, surface);
+					light = XMVector3Normalize(light);
 
-					float intensity = 0.1f + 0.9f * DirectX::XMMax(DirectX::XMVector3Dot(normal, light).m128_f32[0], 0.0f);
+					float intensity = 0.1f + 0.9f * XMMax(XMVector3Dot(normal, light).m128_f32[0], 0.0f);
 
-					DirectX::XMVECTOR diffuse = DirectX::XMVectorScale(lights[0].color, intensity);
-					DirectX::XMFLOAT3 finalColor;
-					DirectX::XMStoreFloat3(&finalColor, diffuse);
+					XMVECTOR diffuse = XMVectorScale(lights[0].color, intensity);
+					XMVECTOR finalColor = XMColorModulate(diffuse, XMLoadFloat3(&p.point.diffuse));
+					XMFLOAT3 output;
+					XMStoreFloat3(&output, finalColor);
 
-					float3 out(p.color.r * finalColor.x, p.color.g * finalColor.y, p.color.b * finalColor.z);
-					render_target->item(x, y) = unsigned_color::from_float3(out);
+					render_target->item(x, y) = unsigned_color::from_color(color::from_XMFLOAT3(output));
 				}
 			}
 		}
@@ -278,6 +297,7 @@ namespace cg::renderer
 	inline bool raytracer<VB, RT>::trace_ray(
 		const ray& ray, float max_t, float min_t, payload& outPayload) const
 	{
+		using namespace DirectX;
 		std::set<payload> hits;
 
 		for (size_t modelIdx = 0; modelIdx != index_buffers.size(); ++modelIdx)
@@ -288,36 +308,38 @@ namespace cg::renderer
 			for (size_t faceIdx = 0; faceIdx != numFaces; ++faceIdx)
 			{
 				// Extract triangle
-				std::array<DirectX::XMVECTOR, 3> face;
-				color faceColor = color::from_float3(float3(1.0f, 0.0f, 1.0f));
+				std::array<vertex, 3> face;
+				std::array<XMVECTOR, 3> triangle;
 				for (size_t i = 0; i != 3; ++i)
 				{
 					const unsigned index = index_buffers.at(modelIdx)->item(3 * faceIdx + i);
-					const vertex& vertex = vertex_buffers.at(modelIdx)->item(index);
-					const DirectX::XMFLOAT3 address(vertex.x, vertex.y, vertex.z);
-					face.at(i) = DirectX::XMLoadFloat3(&address);
-					faceColor = color::from_float3(float3(vertex.diffuse_r, vertex.diffuse_g, vertex.diffuse_b));
+					face.at(i) = vertex_buffers.at(modelIdx)->item(index);
+					triangle.at(i) = XMLoadFloat3(&face.at(i).position);
 				}
-				DirectX::XMVECTOR normal = DirectX::XMVector3Cross(
-					DirectX::XMVectorSubtract(face.at(2), face.at(0)),
-					DirectX::XMVectorSubtract(face.at(1), face.at(0)));
 
-				float distance;
-				if (DirectX::TriangleTests::Intersects(
-					ray.position, ray.direction, face.at(0), face.at(1), face.at(2), distance))
+				const XMVECTOR faceBasisX = XMVectorSubtract(triangle.at(1), triangle.at(0));
+				const XMVECTOR faceBasisY = XMVectorSubtract(triangle.at(2), triangle.at(0));
+				const XMVECTOR normal = XMVector3Normalize(XMVector3Cross(faceBasisY, faceBasisX));
+
+				float t;
+				if (TriangleTests::Intersects(
+					ray.position, ray.direction, triangle.at(0), triangle.at(1), triangle.at(2), t))
 				{
-					if (distance >= min_t && distance <= max_t)
+					if (t >= min_t && t <= max_t)
 					{
-						const DirectX::XMVECTOR hitPoint = DirectX::XMVectorAdd(
-							ray.position,
-							DirectX::XMVectorScale(ray.direction, distance));
+						const XMVECTOR hitPoint = XMVectorAdd(ray.position, XMVectorScale(ray.direction, t));
+
+						const XMVECTOR barycentric = XMFindBarycentric(hitPoint, triangle.at(0), triangle.at(1), triangle.at(2));
+
+						assert(std::abs(XMVectorGetX(XMVectorSum(barycentric)) - 1.0f) < 0.001f);
 
 						payload hit;
-						hit.depth = distance;
-						DirectX::XMStoreFloat3(&hit.position, hitPoint);
-						DirectX::XMStoreFloat3(&hit.normal, normal);
-						hit.color = faceColor;
-						//hit.color = color::from_float3(float3(&hit.position.x));
+						hit.depth = t;
+						hit.point = face.at(0) * XMVectorGetX(barycentric)
+							+ face.at(1) * XMVectorGetY(barycentric)
+							+ face.at(2) * XMVectorGetZ(barycentric);
+
+						XMStoreFloat3(&hit.point.normal, normal);
 
 						hits.insert(hit);
 					}
@@ -325,7 +347,7 @@ namespace cg::renderer
 			}
 		}
 
-		if (hits.size())
+		if (!hits.empty())
 		{
 			outPayload = *hits.begin();
 		}

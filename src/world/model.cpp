@@ -40,15 +40,10 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 	// Extract all vertices that in the file into global buffer
 	const size_t num_vertices = attrib.vertices.size() / 3;
 	std::vector<vertex> vertices(num_vertices);
-	for (size_t i = 0; i != num_vertices; ++i) {
+	for (size_t i = 0; i != num_vertices; ++i)
+	{
 		vertex& current_vertex = vertices[i];
-		current_vertex.x = attrib.vertices.at(3 * i + 0);
-		current_vertex.y = attrib.vertices.at(3 * i + 1);
-		current_vertex.z = attrib.vertices.at(3 * i + 2);
-
-		//current_vertex.diffuse_r = attrib.colors.at(3 * i + 0);
-		//current_vertex.diffuse_g = attrib.colors.at(3 * i + 1);
-		//current_vertex.diffuse_b = attrib.colors.at(3 * i + 2);
+		current_vertex.position = DirectX::XMFLOAT3(&attrib.vertices.at(3 * i));
 	}
 
 	// Process each shape
@@ -64,15 +59,11 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 				const unsigned int local_index = static_cast<unsigned int>(vertex_accumulator.size());
 				vertex_accumulator.push_back(vertices[index]);
 
-				vertex_accumulator.back().diffuse_r = materials[mesh.material_ids[i / 3]].diffuse[0];
-				vertex_accumulator.back().diffuse_g = materials[mesh.material_ids[i / 3]].diffuse[1];
-				vertex_accumulator.back().diffuse_b = materials[mesh.material_ids[i / 3]].diffuse[2];
+				vertex_accumulator.back().diffuse = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].diffuse);
+				vertex_accumulator.back().ambient = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].ambient);
+				vertex_accumulator.back().emissive = DirectX::XMFLOAT3(materials[mesh.material_ids[i / 3]].emission);
 
-				vertex_accumulator.back().ambient_r = materials[mesh.material_ids[i / 3]].ambient[0];
-				vertex_accumulator.back().ambient_g = materials[mesh.material_ids[i / 3]].ambient[1];
-				vertex_accumulator.back().ambient_b = materials[mesh.material_ids[i / 3]].ambient[2];
-
-				vertex_accumulator.back().r = materials[mesh.material_ids[i / 3]].roughness;
+				vertex_accumulator.back().shininess = materials[mesh.material_ids[i / 3]].shininess;
 
 				index_map[index] = local_index;
 			}

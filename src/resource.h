@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <linalg.h>
 #include <vector>
+#include "DirectXMath.h"
 
 
 using namespace linalg::aliases;
@@ -91,6 +92,12 @@ namespace cg
 			//THROW_ERROR("Not implemented yet");
 			return {in.x, in.y, in.z};
 		};
+
+		static color from_XMFLOAT3(const DirectX::XMFLOAT3& in)
+		{
+			return { in.x, in.y, in.z };
+		}
+
 		float3 to_float3() const
 		{
 			//THROW_ERROR("Not implemented yet");
@@ -138,56 +145,71 @@ namespace cg
 
 	struct vertex
 	{
-		float x;
-		float y;
-		float z;
+		DirectX::XMFLOAT3 position;
+		DirectX::XMFLOAT3 normal;
 
-		float nx;
-		float ny;
-		float nz;
+		DirectX::XMFLOAT3 ambient;
+		DirectX::XMFLOAT3 diffuse;
 
-		float ambient_r;
-		float ambient_g;
-		float ambient_b;
+		DirectX::XMFLOAT3 emissive;
+		
+		float shininess;
 
-		float diffuse_r;
-		float diffuse_g;
-		float diffuse_b;
-
-		float emissive_r;
-		float emissive_g;
-		float emissive_b;
-
-		float r;
-
-		float u;
-		float v;
+		DirectX::XMFLOAT2 uv;
 
 		vertex operator+(const vertex& other) const
 		{
-			vertex result{};
-			result.x = this->x + other.x;
-			result.y = this->y + other.y;
-			result.z = this->z + other.z;
-			result.nx = this->nx + other.nx;
-			result.ny = this->ny + other.ny;
-			result.nz = this->nz + other.nz;
+			using namespace DirectX;
 
-			// TODO: Add remaining parameters
+			vertex result;
+			XMVECTOR converter = XMVectorAdd(XMLoadFloat3(&position), XMLoadFloat3(&other.position));
+			XMStoreFloat3(&result.position, converter);
+
+			converter = XMVectorAdd(XMLoadFloat3(&normal), XMLoadFloat3(&other.normal));
+			XMStoreFloat3(&result.normal, converter);
+
+			converter = XMVectorAdd(XMLoadFloat3(&ambient), XMLoadFloat3(&other.ambient));
+			XMStoreFloat3(&result.ambient, converter);
+
+			converter = XMVectorAdd(XMLoadFloat3(&diffuse), XMLoadFloat3(&other.diffuse));
+			XMStoreFloat3(&result.diffuse, converter);
+
+			converter = XMVectorAdd(XMLoadFloat3(&emissive), XMLoadFloat3(&other.emissive));
+			XMStoreFloat3(&result.emissive, converter);
+
+			result.shininess = shininess + other.shininess;
+
+			converter = XMVectorAdd(XMLoadFloat2(&uv), XMLoadFloat2(&other.uv));
+			XMStoreFloat2(&result.uv, converter);
+
 			return result;
 		}
 
 		vertex operator*(const float value) const
 		{
-			vertex result;
-			result.x = this->x * value;
-			result.y = this->y * value;
-			result.z = this->z * value;
-			result.nx = this->nx * value;
-			result.ny = this->ny * value;
-			result.nz = this->nz * value;
+			using namespace DirectX;
 
-			// TODO: Add remaining parameters
+			vertex result;
+			XMVECTOR converter = XMVectorScale(XMLoadFloat3(&position), value);
+			XMStoreFloat3(&result.position, converter);
+
+			converter = XMVectorScale(XMLoadFloat3(&normal), value);
+			XMStoreFloat3(&result.normal, converter);
+
+			converter = XMVectorScale(XMLoadFloat3(&ambient), value);
+			XMStoreFloat3(&result.ambient, converter);
+
+			converter = XMVectorScale(XMLoadFloat3(&diffuse), value);
+			XMStoreFloat3(&result.diffuse, converter);
+
+			converter = XMVectorScale(XMLoadFloat3(&emissive), value);
+			XMStoreFloat3(&result.emissive, converter);
+
+			result.shininess = shininess * value;
+
+			converter = XMVectorScale(XMLoadFloat2(&uv), value);
+			XMStoreFloat2(&result.uv, converter);
+
 			return result;
 		}
 	};
