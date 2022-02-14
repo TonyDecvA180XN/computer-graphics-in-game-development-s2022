@@ -2,6 +2,7 @@
 
 #include "resource.h"
 
+#include <cmath>
 #include <iostream>
 #include <linalg.h>
 #include <memory>
@@ -270,13 +271,12 @@ namespace cg::renderer
 			{
 				const float fx = static_cast<float>(x);
 				const float fy = static_cast<float>(y);
-				XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
-				XMVECTOR direction = XMVector3Unproject(pixel,
-														0.0f, 0.0f, w, h,
-														0.0f, 1.0f,
-														projection, view, world);
-
-				ray r(eye, direction);
+				const XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
+				XMVECTOR lookVector = XMVector3Unproject(pixel,
+														 0.0f, 0.0f, w, h,
+														 0.0f, 1.0f,
+														 projection, view, world);
+				ray r(eye, lookVector);
 
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
@@ -365,6 +365,41 @@ namespace cg::renderer
 					XMStoreFloat3(&output, totalIntensity);
 
 					render_target->item(x, y) = unsigned_color::from_color(color::from_XMFLOAT3(output));
+				}
+				else
+				{
+					// miss shader
+
+					// render grid
+					XMFLOAT3 look;
+					const XMVECTOR lookDir = XMVector3Normalize(lookVector);
+					XMStoreFloat3(&look, lookDir);
+
+					if (XMVectorGetY(lookDir) >= 0.999f)
+					{
+						continue;
+					}
+
+					float phi = XMConvertToDegrees(std::acos(look.y));
+					float theta = XMConvertToDegrees(std::atan(look.x / look.z)) + 90.0f;
+
+					phi /= 2.5f;
+					theta /= 2.5f;
+
+					// small grid every 2.5 degrees
+					if (std::abs(phi - std::round(phi)) <= 0.012f || std::abs(theta - std::round(theta)) <= 0.012f)
+					{
+						render_target->item(x, y) = unsigned_color::from_float3(float3(0.5f, 0.5f, 0.5f));
+					}
+
+					phi /= 4.0f;
+					theta /= 4.0f;
+
+					// large grid every 10 degrees
+					if (std::abs(phi - std::round(phi)) <= 0.006f || std::abs(theta - std::round(theta)) <= 0.006f)
+					{
+						render_target->item(x, y) = unsigned_color::from_float3(float3(1.0f, 1.0f, 1.0f));
+					}
 				}
 			}
 		}
