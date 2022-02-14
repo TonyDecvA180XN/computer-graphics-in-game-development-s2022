@@ -261,7 +261,7 @@ namespace cg::renderer
 			XMVectorSet(0.0f, 1.9f, 0.0f, 1.0f),
 			XMVectorSet(0.25f, 0.25f, 0.25f, 1.0f),
 			XMVectorSet(0.75f, 0.75f, 0.75f, 1.0f),
-			XMVectorSet(0.3f, 0.3f, 0.3f, 1.0f)
+			XMVectorSet(0.4f, 0.4f, 0.4f, 1.0f)
 		});
 
 		for (size_t y = 0; y != height; ++y)
@@ -281,7 +281,7 @@ namespace cg::renderer
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
 				{
-					// Use this switch to enable Blinn-Phong or just Phong lighting
+					// Use this switchers to play with parameters
 					constexpr bool USE_BLINN_LIGHTING = false;
 					constexpr bool USE_AMBIENT = true;
 					constexpr bool USE_DIFFUSE = true;
@@ -319,15 +319,32 @@ namespace cg::renderer
 
 						if (USE_SPECULAR)
 						{
-							// add specular component
-							//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
-							const XMVECTOR materialSpecular = XMVectorSplatOne();
-							const XMVECTOR specularComponent = XMColorModulate(
-								materialSpecular,
-								XMColorModulate(
-									XMVectorPow(XMVectorDotPositive(reflectedLight, cameraDir), shininess),
-									l.specular));
-							totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+							if (USE_BLINN_LIGHTING)
+							{
+								// add specular component
+								//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
+								const XMVECTOR materialSpecular = XMVectorSplatOne();
+								const XMVECTOR raisedShininess = XMVectorScale(shininess, 0.25f);
+								const XMVECTOR halfDir = XMVector3Normalize(XMVectorAdd(incomingLight, cameraDir));
+								const XMVECTOR specularComponent = XMColorModulate(
+									materialSpecular,
+									XMColorModulate(
+										XMVectorPow(XMVectorDotPositive(surfaceNormal, halfDir), raisedShininess),
+										l.specular));
+								totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+							}
+							else
+							{
+								// add specular component
+								//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
+								const XMVECTOR materialSpecular = XMVectorSplatOne();
+								const XMVECTOR specularComponent = XMColorModulate(
+									materialSpecular,
+									XMColorModulate(
+										XMVectorPow(XMVectorDotPositive(reflectedLight, cameraDir), shininess),
+										l.specular));
+								totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+							}
 						}
 					}
 					XMFLOAT3 output;
