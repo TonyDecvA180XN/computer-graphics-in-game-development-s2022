@@ -16,6 +16,12 @@
 
 using namespace linalg::aliases;
 
+template<class T>
+bool IsEqual(const T v1, const T v2, const T tolerance = 0.001)
+{
+	return std::abs(v1 - v2) <= tolerance;
+}
+
 namespace DirectX
 {
 	inline XMVECTOR XMTriangleAreaTwice(FXMVECTOR a, FXMVECTOR b)
@@ -171,6 +177,10 @@ namespace cg::renderer
 		std::function<payload(const ray& ray, payload& payload, const triangle<VB>& triangle)> any_hit_shader =
 			nullptr;
 
+		bool render_floor_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
+		bool render_axes(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
+		bool render_sky_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
+
 		float2 get_jitter(int frame_id);
 
 	protected:
@@ -272,11 +282,11 @@ namespace cg::renderer
 				const float fx = static_cast<float>(x);
 				const float fy = static_cast<float>(y);
 				const XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
-				XMVECTOR lookVector = XMVector3Unproject(pixel,
-														 0.0f, 0.0f, w, h,
-														 0.0f, 1.0f,
-														 projection, view, world);
-				ray r(eye, lookVector);
+				XMVECTOR cameraRay = XMVector3Normalize(XMVector3Unproject(pixel,
+																		   0.0f, 0.0f, w, h,
+																		   0.0f, 1.0f,
+																		   projection, view, world));
+				ray r(eye, cameraRay);
 
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
@@ -369,37 +379,21 @@ namespace cg::renderer
 				else
 				{
 					// miss shader
+					// WARNING: RENDERING BOT SKY GRID AND FLOOR GRID IS NOT RECOMMENDED
+					// THEY OVERLAP EACH OTHER AND LOOK UGLY:)
 
-					// render grid
-					XMFLOAT3 look;
-					const XMVECTOR lookDir = XMVector3Normalize(lookVector);
-					XMStoreFloat3(&look, lookDir);
-
-					if (XMVectorGetY(lookDir) >= 0.999f)
+					if (render_axes(x, y, eye, cameraRay))
 					{
 						continue;
 					}
-
-					float phi = XMConvertToDegrees(std::acos(look.y));
-					float theta = XMConvertToDegrees(std::atan(look.x / look.z)) + 90.0f;
-
-					phi /= 2.5f;
-					theta /= 2.5f;
-
-					// small grid every 2.5 degrees
-					if (std::abs(phi - std::round(phi)) <= 0.012f || std::abs(theta - std::round(theta)) <= 0.012f)
+					if (render_floor_grid(x, y, eye, cameraRay))
 					{
-						render_target->item(x, y) = unsigned_color::from_float3(float3(0.5f, 0.5f, 0.5f));
+						continue;
 					}
-
-					phi /= 4.0f;
-					theta /= 4.0f;
-
-					// large grid every 10 degrees
-					if (std::abs(phi - std::round(phi)) <= 0.006f || std::abs(theta - std::round(theta)) <= 0.006f)
-					{
-						render_target->item(x, y) = unsigned_color::from_float3(float3(1.0f, 1.0f, 1.0f));
-					}
+					//if (render_sky_grid(x, y, eye, cameraRay))
+					//{
+					//	continue;
+					//}
 				}
 			}
 		}
@@ -476,6 +470,121 @@ namespace cg::renderer
 		const triangle<VB>& triangle, const ray& ray) const
 	{
 		THROW_ERROR("Not implemented yet");
+	}
+
+	template <typename VB, typename RT>
+	bool raytracer<VB, RT>::render_floor_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	{
+		using namespace DirectX;
+		constexpr float thickness = 0.002f;
+		constexpr float gridRadius = 8.0f; // in units
+		if (!IsEqual(XMVectorGetY(dir), 0.0f))
+		{
+			const float t = -XMVectorGetY(eye) / XMVectorGetY(dir);
+			if (t >= 0.0f)
+			{
+				const XMVECTOR floorHit = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const float floorX = XMVectorGetX(floorHit);
+				const float floorZ = XMVectorGetZ(floorHit);
+				if (floorX >= -gridRadius && floorX <= gridRadius)
+				{
+					if (floorZ >= -gridRadius && floorZ <= gridRadius)
+					{
+						if (IsEqual(floorX, std::round(floorX), thickness * t) ||
+							IsEqual(floorZ, std::round(floorZ), thickness * t))
+						{
+							render_target->item(x, y) = unsigned_color::from_float3(float3(0.48f, 0.48f, 0.48f));
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	template <typename VB, typename RT>
+	bool raytracer<VB, RT>::render_axes(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	{
+		using namespace DirectX;
+		constexpr float thickness = 0.003f;
+		if (!IsEqual(XMVectorGetY(dir), 0.0f)) // X-axis, red
+		{
+			const float t = -XMVectorGetY(eye) / XMVectorGetY(dir);
+			if (t >= 0.0f)
+			{
+				const XMVECTOR planeXZ = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const float axisZ = XMVectorGetZ(planeXZ);
+				if (IsEqual(axisZ, 0.0f, thickness * t))
+				{
+					render_target->item(x, y) = unsigned_color::from_float3(float3(0.96f, 0.21f, 0.32f));
+					return true;
+				}
+			}
+		}
+		if (!IsEqual(XMVectorGetZ(dir), 0.0f)) // Y-axis, green
+		{
+			const float t = -XMVectorGetZ(eye) / XMVectorGetZ(dir);
+			if (t >= 0.0f)
+			{
+				const XMVECTOR planeXY = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const float axisX = XMVectorGetX(planeXY);
+				if (IsEqual(axisX, 0.0f, thickness * t))
+				{
+					render_target->item(x, y) = unsigned_color::from_float3(float3(0.54f, 0.79f, 0.13f));
+					return true;
+				}
+			}
+		}
+		if (!IsEqual(XMVectorGetX(dir), 0.0f)) // Z-axis, blue
+		{
+			const float t = -XMVectorGetX(eye) / XMVectorGetX(dir);
+			if (t >= 0.0f)
+			{
+				const XMVECTOR planeYZ = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const float axisY = XMVectorGetY(planeYZ);
+				if (IsEqual(axisY, 0.0f, thickness * t))
+				{
+					render_target->item(x, y) = unsigned_color::from_float3(float3(0.18f, 0.52f, 0.89f));
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	template<typename VB, typename RT>
+	bool raytracer<VB, RT>::render_sky_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	{
+		using namespace DirectX;
+		constexpr float thickness = 0.0075f;
+		constexpr float majorDensity = 10.0f; // every 10 degrees
+		constexpr float minorSubdiv = 5.0f; // every 10 / 5 =  every 2 degrees
+
+		if (!IsEqual(XMVectorGetY(dir), 1.0f))
+		{
+			float phi = XMConvertToDegrees(std::acos(XMVectorGetY(dir)));
+			float theta = XMConvertToDegrees(std::atan(XMVectorGetX(dir) / XMVectorGetZ(dir))) + 90.0f;
+
+			phi /= majorDensity;
+			theta /= majorDensity;
+
+			if (IsEqual(phi, std::round(phi), thickness) || IsEqual(theta, std::round(theta), thickness))
+			{
+				render_target->item(x, y) = unsigned_color::from_float3(float3(0.78f, 0.78f, 0.78f));
+				return true;
+			}
+
+			phi *= minorSubdiv;
+			theta *= minorSubdiv;
+
+			if (IsEqual(phi, std::round(phi), thickness * 2) || IsEqual(theta, std::round(theta), thickness * 2))
+			{
+				render_target->item(x, y) = unsigned_color::from_float3(float3(0.6f, 0.6f, 0.6f));
+				return true;
+			}
+		}
+		return false;
 	}
 
 	template <typename VB, typename RT>
