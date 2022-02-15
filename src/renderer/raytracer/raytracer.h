@@ -162,7 +162,7 @@ namespace cg::renderer
 
 		void build_acceleration_structure();
 
-		std::vector<aabb<VB>> acceleration_structures;
+		std::vector<DirectX::BoundingBox> acceleration_structures;
 
 		void ray_generation(size_t depth,
 							size_t accumulation_num);
@@ -237,7 +237,16 @@ namespace cg::renderer
 	template <typename VB, typename RT>
 	inline void raytracer<VB, RT>::build_acceleration_structure()
 	{
-		THROW_ERROR("Not implemented yet");
+		using namespace DirectX;
+		acceleration_structures.clear();
+		acceleration_structures.reserve(vertex_buffers.size());
+
+		for (std::shared_ptr<resource<VB>>& vb : vertex_buffers)
+		{
+			BoundingBox aabb;
+			BoundingBox::CreateFromPoints(aabb, vb->get_number_of_elements(), &vb->item(0).position, sizeof(VB));
+			acceleration_structures.emplace_back(aabb);
+		}
 	}
 
 	template <typename VB, typename RT>
@@ -408,6 +417,12 @@ namespace cg::renderer
 
 		for (size_t modelIdx = 0; modelIdx != index_buffers.size(); ++modelIdx)
 		{
+			float _;
+			if (!acceleration_structures[modelIdx].Intersects(ray.position, ray.direction, _))
+			{
+				continue;
+			}
+
 			const size_t numIndices = index_buffers.at(modelIdx)->get_number_of_elements();
 			const size_t numFaces = numIndices / 3;
 

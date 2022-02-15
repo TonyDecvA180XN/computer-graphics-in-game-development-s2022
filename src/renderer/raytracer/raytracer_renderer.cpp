@@ -48,6 +48,8 @@ void cg::renderer::ray_tracing_renderer::render()
 	ray_tracer->set_vertex_buffers(vertexBuffers);
 	ray_tracer->set_index_buffers(indexBuffers);
 
+	ray_tracer->build_acceleration_structure();
+
 	ray_tracer->ray_generation(0, 0);
 
 	utils::save_resource(*render_target, settings->result_path);
