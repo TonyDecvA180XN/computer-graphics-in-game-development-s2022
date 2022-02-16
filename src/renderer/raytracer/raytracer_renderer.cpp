@@ -48,7 +48,7 @@ void cg::renderer::ray_tracing_renderer::render()
 
 	for (size_t frame = 0; frame != 10; ++frame)
 	{
-		std::cerr << "Rendering frame " << frame << "..." << std::endl;
+		std::cerr << "Rendering frame " << frame << "...\r" << std::flush;
 		ray_tracer->clear_render_target();
 		ray_tracer->ray_generation(frame);
 	}

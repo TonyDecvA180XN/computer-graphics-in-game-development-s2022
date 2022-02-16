@@ -622,7 +622,7 @@ namespace cg::renderer
 	{
 		DirectX::XMFLOAT2 result(0.0f, 0.0f);
 		constexpr int base_x = 2;
-		int index = frame_id + 1;
+		int index = static_cast<int>(frame_id) + 1;
 		float inv_base = 1.0f / base_x;
 		float fraction = inv_base;
 		while (index > 0)
@@ -632,12 +632,12 @@ namespace cg::renderer
 			fraction *= inv_base;
 		}
 		constexpr int base_y = 3;
-		index = frame_id + 1;
+		index = static_cast<int>(frame_id) + 1;
 		inv_base = 1.0f / base_y;
 		fraction = inv_base;
 		while (index > 0)
 		{
-			result.y += (index % base_y) * fraction;
+			result.y += index % base_y * fraction;
 			index /= base_y;
 			fraction *= inv_base;
 		}
