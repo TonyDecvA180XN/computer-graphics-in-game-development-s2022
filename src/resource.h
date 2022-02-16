@@ -128,6 +128,12 @@ namespace cg
 					static_cast<unsigned char>(255.0f * std::clamp(color.z, 0.0f, 1.0f)),
 			};
 		}
+		static unsigned_color from_xmvector(const DirectX::FXMVECTOR color)
+		{
+			DirectX::XMFLOAT3 temp;
+			DirectX::XMStoreFloat3(&temp, color);
+			return from_color(color::from_XMFLOAT3(temp));
+		}
 		float3 to_float3() const
 		{
 			//THROW_ERROR("Not implemented yet");
@@ -137,6 +143,11 @@ namespace cg
 				static_cast<float>(b) / 255.0f
 			};
 		};
+		DirectX::XMVECTOR to_xmvector() const
+		{
+			DirectX::XMFLOAT3 f(&this->to_float3()[0]);
+			return DirectX::XMLoadFloat3(&f);
+		}
 		unsigned char r;
 		unsigned char g;
 		unsigned char b;

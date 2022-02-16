@@ -164,8 +164,7 @@ namespace cg::renderer
 
 		std::vector<DirectX::BoundingBox> acceleration_structures;
 
-		void ray_generation(size_t depth,
-							size_t accumulation_num);
+		void ray_generation(size_t frame_id);
 
 		bool trace_ray(const ray& ray, float max_t, float min_t, payload& payload, bool bIsShadowRay = false) const;
 
@@ -181,11 +180,11 @@ namespace cg::renderer
 		bool render_axes(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
 		bool render_sky_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
 
-		float2 get_jitter(int frame_id);
+		DirectX::XMFLOAT2 get_jitter(size_t frame_id);
 
 	protected:
 		std::shared_ptr<resource<RT>> render_target;
-		std::shared_ptr<resource<float3>> history;
+		std::shared_ptr<resource<RT>> history;
 		std::vector<std::shared_ptr<resource<unsigned int>>> index_buffers;
 		std::vector<std::shared_ptr<resource<VB>>> vertex_buffers;
 
@@ -201,6 +200,7 @@ namespace cg::renderer
 		std::shared_ptr<resource<RT>> in_render_target)
 	{
 		render_target = in_render_target;
+		history = std::make_shared<resource<RT>>(width, height);
 	}
 
 	template <typename VB, typename RT>
@@ -263,7 +263,7 @@ namespace cg::renderer
 	}
 
 	template <typename VB, typename RT>
-	inline void raytracer<VB, RT>::ray_generation(size_t depth, size_t accumulation_num)
+	inline void raytracer<VB, RT>::ray_generation(size_t frame_id)
 	{
 		using namespace DirectX;
 
@@ -271,10 +271,15 @@ namespace cg::renderer
 		const float w = static_cast<float>(width);
 		const float minZ = camera->get_z_near();
 		const float maxZ = camera->get_z_far();
+		const XMVECTOR eye = camera->get_position();
 		const XMMATRIX world = XMMatrixIdentity();
 		const XMMATRIX view = camera->get_view_matrix();
-		const XMMATRIX projection = camera->get_projection_matrix();
-		const XMVECTOR eye = camera->get_position();
+		XMMATRIX projection = camera->get_projection_matrix();
+
+		XMFLOAT2 jitter = get_jitter(frame_id);
+		jitter.x = (jitter.x * 2.0f - 1.0f) / w * 2;
+		jitter.y = (jitter.y * 2.0f - 1.0f) / h * 2;
+		projection.r[2] = XMVectorAdd(projection.r[2], XMLoadFloat2(&jitter));
 
 		std::vector<light> lights;
 		lights.push_back({
@@ -306,7 +311,7 @@ namespace cg::renderer
 					constexpr bool USE_DIFFUSE = true;
 					constexpr bool USE_SPECULAR = true;
 
-					XMVECTOR totalIntensity = XMVectorZero();
+					XMVECTOR output = XMVectorZero();
 					for (const light& l : lights)
 					{
 						const XMVECTOR address = XMLoadFloat3(&p.point.position);
@@ -324,7 +329,7 @@ namespace cg::renderer
 							// add ambient component
 							const XMVECTOR materialAmbient = XMLoadFloat3(&p.point.ambient);
 							const XMVECTOR ambientComponent = XMColorModulate(l.ambient, materialAmbient);
-							totalIntensity = XMVectorAdd(totalIntensity, ambientComponent);
+							output = XMVectorAdd(output, ambientComponent);
 						}
 
 						// skip backfaces during lighting
@@ -354,7 +359,7 @@ namespace cg::renderer
 							diffuseComponent = XMColorModulate(diffuseComponent, shadow);
 							diffuseComponent = XMColorModulate(diffuseComponent, materialDiffuse);
 
-							totalIntensity = XMVectorAdd(totalIntensity, diffuseComponent);
+							output = XMVectorAdd(output, diffuseComponent);
 						}
 
 						// add specular component
@@ -377,19 +382,19 @@ namespace cg::renderer
 							specularComponent = XMVectorPow(specularComponent, shininess);
 							specularComponent = XMColorModulate(specularComponent, materialSpecular);
 							specularComponent = XMColorModulate(specularComponent, l.specular);
-							totalIntensity = XMVectorAdd(totalIntensity, specularComponent);
+							output = XMVectorAdd(output, specularComponent);
 						}
 					}
-					XMFLOAT3 output;
-					XMStoreFloat3(&output, totalIntensity);
-
-					render_target->item(x, y) = unsigned_color::from_color(color::from_XMFLOAT3(output));
+					render_target->item(x, y) = unsigned_color::from_xmvector(output);
 				}
 				else
 				{
 					// miss shader
 					// WARNING: RENDERING BOT SKY GRID AND FLOOR GRID IS NOT RECOMMENDED
 					// THEY OVERLAP EACH OTHER AND LOOK UGLY:)
+					//
+					// ALSO: GRID AND AXES ARE NOT AFFECTED BY TAA BECAUSE THEY ARE
+					// RENDERED MATHEMATICALLY
 
 					if (render_axes(x, y, eye, cameraRay))
 					{
@@ -404,6 +409,16 @@ namespace cg::renderer
 					//	continue;
 					//}
 				}
+
+				XMVECTOR current_color = render_target->item(x, y).to_xmvector();
+				const XMVECTOR history_color = history->item(x, y).to_xmvector();
+				if (frame_id > 0) // skip 1st frame
+				{
+					const float mix_factor = 0.75f;
+					current_color = XMVectorLerp(current_color, history_color, mix_factor);
+				}
+				render_target->item(x, y) = unsigned_color::from_xmvector(current_color);
+				history->item(x, y) = unsigned_color::from_xmvector(current_color);
 			}
 		}
 	}
@@ -603,9 +618,30 @@ namespace cg::renderer
 	}
 
 	template <typename VB, typename RT>
-	float2 raytracer<VB, RT>::get_jitter(int frame_id)
+	DirectX::XMFLOAT2 raytracer<VB, RT>::get_jitter(size_t frame_id)
 	{
-		THROW_ERROR("Not implemented yet");
+		DirectX::XMFLOAT2 result(0.0f, 0.0f);
+		constexpr int base_x = 2;
+		int index = frame_id + 1;
+		float inv_base = 1.0f / base_x;
+		float fraction = inv_base;
+		while (index > 0)
+		{
+			result.x += (index % base_x) * fraction;
+			index /= base_x;
+			fraction *= inv_base;
+		}
+		constexpr int base_y = 3;
+		index = frame_id + 1;
+		inv_base = 1.0f / base_y;
+		fraction = inv_base;
+		while (index > 0)
+		{
+			result.y += (index % base_y) * fraction;
+			index /= base_y;
+			fraction *= inv_base;
+		}
+		return result;
 	}
 
 	template <typename VB>

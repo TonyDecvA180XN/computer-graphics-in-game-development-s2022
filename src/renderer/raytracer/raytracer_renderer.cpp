@@ -38,19 +38,19 @@ void cg::renderer::ray_tracing_renderer::update() {}
 
 void cg::renderer::ray_tracing_renderer::render()
 {
-	ray_tracer->clear_render_target();
-
 	auto& vertexBuffers = model->get_vertex_buffers();
 	auto& indexBuffers = model->get_index_buffers();
-
-	const size_t numShapes = vertexBuffers.size();
 
 	ray_tracer->set_vertex_buffers(vertexBuffers);
 	ray_tracer->set_index_buffers(indexBuffers);
 
 	ray_tracer->build_acceleration_structure();
 
-	ray_tracer->ray_generation(0, 0);
-
+	for (size_t frame = 0; frame != 10; ++frame)
+	{
+		std::cerr << "Rendering frame " << frame << "..." << std::endl;
+		ray_tracer->clear_render_target();
+		ray_tracer->ray_generation(frame);
+	}
 	utils::save_resource(*render_target, settings->result_path);
 }
