@@ -4,11 +4,10 @@
 
 #include <iostream>
 
-
 void cg::renderer::ray_tracing_renderer::init()
 {
 	// Make camera
-	camera = std::make_shared<cg::world::camera>();
+	camera = std::make_shared<world::camera>();
 	camera->set_position(float3(settings->camera_position.data()));
 	camera->set_angle_of_view(settings->camera_angle_of_view);
 	camera->set_height(static_cast<float>(settings->height));
@@ -22,19 +21,23 @@ void cg::renderer::ray_tracing_renderer::init()
 	render_target = std::make_shared<resource<unsigned_color>>(settings->width, settings->height);
 
 	// Load model from file
-	model = std::make_shared<cg::world::model>();
+	model = std::make_shared<world::model>();
 	model->load_obj(settings->model_path);
 
 	// Make raytracer
-	ray_tracer = std::make_shared<cg::renderer::raytracer<vertex, unsigned_color>>();
+	ray_tracer = std::make_shared<raytracer<vertex, unsigned_color>>();
 	ray_tracer->set_viewport(settings->width, settings->height);
 	ray_tracer->set_render_target(render_target);
 	ray_tracer->set_camera(camera);
 }
 
-void cg::renderer::ray_tracing_renderer::destroy() {}
+void cg::renderer::ray_tracing_renderer::destroy()
+{
+}
 
-void cg::renderer::ray_tracing_renderer::update() {}
+void cg::renderer::ray_tracing_renderer::update()
+{
+}
 
 void cg::renderer::ray_tracing_renderer::render()
 {
@@ -46,11 +49,14 @@ void cg::renderer::ray_tracing_renderer::render()
 
 	ray_tracer->build_acceleration_structure();
 
+	// render some frames since TAA effect comes after some time
 	for (size_t frame = 0; frame != 10; ++frame)
 	{
 		std::cerr << "Rendering frame " << frame << "...\r" << std::flush;
 		ray_tracer->clear_render_target();
-		ray_tracer->ray_generation(frame);
+		ray_tracer->launch_ray_generation(frame);
 	}
+
+	// save and show last frame
 	utils::save_resource(*render_target, settings->result_path);
 }
