@@ -3,10 +3,8 @@
 #include "resource.h"
 
 #include <cmath>
-#include <iostream>
 #include <linalg.h>
 #include <memory>
-#include <omp.h>
 #include <random>
 #include "world/camera.h"
 #include "DirectXMath.h"
@@ -78,55 +76,6 @@ namespace cg::renderer
 		}
 	};
 
-
-	template <typename VB>
-	struct triangle
-	{
-		triangle(const VB& vertex_a, const VB& vertex_b, const VB& vertex_c);
-
-		float3 a;
-		float3 b;
-		float3 c;
-
-		float3 ba;
-		float3 ca;
-
-		float3 na;
-		float3 nb;
-		float3 nc;
-
-		float3 ambient;
-		float3 diffuse;
-		float3 emissive;
-	};
-
-
-	template <typename VB>
-	inline triangle<VB>::triangle(
-		const VB& vertex_a, const VB& vertex_b, const VB& vertex_c)
-	{
-		THROW_ERROR("Not implemented yet");
-	}
-
-
-	template <typename VB>
-	class aabb
-	{
-	public:
-		void add_triangle(const triangle<VB> triangle);
-
-		const std::vector<triangle<VB>>& get_triangles() const;
-
-		bool aabb_test(const ray& ray) const;
-
-	protected:
-		std::vector<triangle<VB>> triangles;
-
-		float3 aabb_min;
-		float3 aabb_max;
-	};
-
-
 	struct light
 	{
 		DirectX::XMVECTOR position;
@@ -168,17 +117,13 @@ namespace cg::renderer
 
 		bool trace_ray(const ray& ray, float max_t, float min_t, payload& payload, bool bIsShadowRay = false) const;
 
-		payload intersection_shader(const triangle<VB>& triangle, const ray& ray) const;
+		DirectX::XMVECTOR hit_shader(const payload& p, const ray& camera_ray);
 
-		std::function<payload(const ray& ray)> miss_shader = nullptr;
-		std::function<payload(const ray& ray, payload& payload, const triangle<VB>& triangle, size_t depth)>
-		closest_hit_shader = nullptr;
-		std::function<payload(const ray& ray, payload& payload, const triangle<VB>& triangle)> any_hit_shader =
-			nullptr;
+		DirectX::XMVECTOR miss_shader(const payload& p, const ray& camera_ray);
 
-		bool render_floor_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
-		bool render_axes(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
-		bool render_sky_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir);
+		bool render_floor_grid(const ray& camera_ray, DirectX::XMVECTOR& output);
+		bool render_axes(const ray& camera_ray, DirectX::XMVECTOR& output);
+		bool render_sky_grid(const ray& camera_ray, DirectX::XMVECTOR& output);
 
 		DirectX::XMFLOAT2 get_jitter(size_t frame_id);
 
@@ -281,14 +226,6 @@ namespace cg::renderer
 		jitter.y = (jitter.y * 2.0f - 1.0f) / h * 2;
 		projection.r[2] = XMVectorAdd(projection.r[2], XMLoadFloat2(&jitter));
 
-		std::vector<light> lights;
-		lights.push_back({
-			XMVectorSet(0.0f, 1.925f, 0.0f, 1.0f),
-			XMVectorSet(0.25f, 0.25f, 0.25f, 1.0f),
-			XMVectorSet(0.75f, 0.75f, 0.75f, 1.0f),
-			XMVectorSet(0.4f, 0.4f, 0.4f, 1.0f)
-		});
-
 		for (size_t y = 0; y != height; ++y)
 		{
 			for (size_t x = 0; x != width; ++x)
@@ -296,118 +233,25 @@ namespace cg::renderer
 				const float fx = static_cast<float>(x);
 				const float fy = static_cast<float>(y);
 				const XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
-				XMVECTOR cameraRay = XMVector3Normalize(XMVector3Unproject(pixel,
-																		   0.0f, 0.0f, w, h,
-																		   0.0f, 1.0f,
-																		   projection, view, world));
-				ray r(eye, cameraRay);
+				XMVECTOR pixelDir = XMVector3Normalize(XMVector3Unproject(pixel,
+																		  0.0f, 0.0f, w, h,
+																		  0.0f, 1.0f,
+																		  projection, view, world));
+				ray r(eye, pixelDir);
 
 				payload p;
 				if (trace_ray(r, maxZ, minZ, p))
 				{
-					// Use this switchers to play with parameters
-					constexpr bool USE_BLINN_LIGHTING = false;
-					constexpr bool USE_AMBIENT = true;
-					constexpr bool USE_DIFFUSE = true;
-					constexpr bool USE_SPECULAR = true;
-
-					XMVECTOR output = XMVectorZero();
-					for (const light& l : lights)
-					{
-						const XMVECTOR address = XMLoadFloat3(&p.point.position);
-						const XMVECTOR surfaceNormal = XMLoadFloat3(&p.point.normal);
-						const XMVECTOR lightVector = XMVectorSubtract(l.position, address);
-						const XMVECTOR lightDir = XMVector3Normalize(lightVector);
-						const XMVECTOR incident = XMVectorScale(lightDir, -1.0f);
-						const XMVECTOR reflectedLight = XMVector3Reflect(incident, surfaceNormal);
-						const XMVECTOR cameraDir = XMVector3Normalize(XMVectorSubtract(eye, address));
-						XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
-						XMVECTOR shadow = XMVectorSplatOne();
-
-						if (USE_AMBIENT)
-						{
-							// add ambient component
-							const XMVECTOR materialAmbient = XMLoadFloat3(&p.point.ambient);
-							const XMVECTOR ambientComponent = XMColorModulate(l.ambient, materialAmbient);
-							output = XMVectorAdd(output, ambientComponent);
-						}
-
-						// skip backfaces during lighting
-						if (XMVectorGetX(XMVector3Dot(lightDir, surfaceNormal)) < 0.0f)
-						{
-							continue;
-						}
-
-						// trace shadow
-						const XMVECTOR offsetPosition = XMVectorAdd(address, XMVectorScale(surfaceNormal, 0.001f));
-						ray lightRay(address, lightDir);
-						payload shadowPayload;
-						const bool bIsShadow = trace_ray(lightRay, XMVectorGetX(XMVector3Length(lightVector)), 0.0001f,
-														 shadowPayload, true);
-						if (bIsShadow)
-						{
-							shadow = XMVectorReplicate(0.5f);
-							shadow = XMVectorClamp(shadow, XMVectorZero(), XMVectorSplatOne());
-						}
-
-						if (USE_DIFFUSE)
-						{
-							// add diffuse component
-							const XMVECTOR materialDiffuse = XMLoadFloat3(&shadowPayload.point.diffuse);
-							XMVECTOR diffuseComponent = XMVectorDotUnsigned(lightDir, surfaceNormal);
-							diffuseComponent = XMColorModulate(diffuseComponent, l.duffuse);
-							diffuseComponent = XMColorModulate(diffuseComponent, shadow);
-							diffuseComponent = XMColorModulate(diffuseComponent, materialDiffuse);
-
-							output = XMVectorAdd(output, diffuseComponent);
-						}
-
-						// add specular component
-						if (!bIsShadow && USE_SPECULAR)
-						{
-							// Cornell box does not have material specular value
-							//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
-							const XMVECTOR materialSpecular = XMVectorSplatOne();
-							XMVECTOR specularComponent;
-							if (USE_BLINN_LIGHTING)
-							{
-								shininess = XMVectorScale(shininess, 0.25f);
-								const XMVECTOR halfDir = XMVector3Normalize(XMVectorAdd(lightDir, cameraDir));
-								specularComponent = XMVectorDotUnsigned(surfaceNormal, halfDir);
-							}
-							else
-							{
-								specularComponent = XMVectorDotUnsigned(reflectedLight, cameraDir);
-							}
-							specularComponent = XMVectorPow(specularComponent, shininess);
-							specularComponent = XMColorModulate(specularComponent, materialSpecular);
-							specularComponent = XMColorModulate(specularComponent, l.specular);
-							output = XMVectorAdd(output, specularComponent);
-						}
-					}
+					const XMVECTOR output = hit_shader(p, r);
 					render_target->item(x, y) = unsigned_color::from_xmvector(output);
 				}
 				else
 				{
-					// miss shader
-					// WARNING: RENDERING BOT SKY GRID AND FLOOR GRID IS NOT RECOMMENDED
-					// THEY OVERLAP EACH OTHER AND LOOK UGLY:)
-					//
-					// ALSO: GRID AND AXES ARE NOT AFFECTED BY TAA BECAUSE THEY ARE
-					// RENDERED MATHEMATICALLY
-
-					if (render_axes(x, y, eye, cameraRay))
+					const XMVECTOR output = miss_shader(p, r);
+					if (XMVectorGetX(XMVector3Length(output)) > 0)
 					{
-						continue;
+						render_target->item(x, y) = unsigned_color::from_xmvector(output);
 					}
-					if (render_floor_grid(x, y, eye, cameraRay))
-					{
-						continue;
-					}
-					//if (render_sky_grid(x, y, eye, cameraRay))
-					//{
-					//	continue;
-					//}
 				}
 
 				XMVECTOR current_color = render_target->item(x, y).to_xmvector();
@@ -495,25 +339,141 @@ namespace cg::renderer
 		return !hits.empty();
 	}
 
-	template <typename VB, typename RT>
-	inline payload raytracer<VB, RT>::intersection_shader(
-		const triangle<VB>& triangle, const ray& ray) const
+	template<typename VB, typename RT>
+	DirectX::XMVECTOR raytracer<VB, RT>::hit_shader(const payload& p, const ray& camera_ray)
 	{
-		THROW_ERROR("Not implemented yet");
+		using namespace DirectX;
+
+		// Use this switchers to play with parameters
+		constexpr bool USE_BLINN_LIGHTING = false;
+		constexpr bool USE_AMBIENT = true;
+		constexpr bool USE_DIFFUSE = true;
+		constexpr bool USE_SPECULAR = true;
+
+		std::vector<light> lights;
+		lights.push_back({
+			XMVectorSet(0.0f, 1.925f, 0.0f, 1.0f),
+			XMVectorSet(0.25f, 0.25f, 0.25f, 1.0f),
+			XMVectorSet(0.75f, 0.75f, 0.75f, 1.0f),
+			XMVectorSet(0.4f, 0.4f, 0.4f, 1.0f)
+		});
+
+
+		XMVECTOR output = XMVectorZero();
+		for (const light& l : lights)
+		{
+			const XMVECTOR address = XMLoadFloat3(&p.point.position);
+			const XMVECTOR surfaceNormal = XMLoadFloat3(&p.point.normal);
+			const XMVECTOR lightVector = XMVectorSubtract(l.position, address);
+			const XMVECTOR lightDir = XMVector3Normalize(lightVector);
+			const XMVECTOR incident = XMVectorScale(lightDir, -1.0f);
+			const XMVECTOR reflectedLight = XMVector3Reflect(incident, surfaceNormal);
+			const XMVECTOR cameraDir = XMVector3Normalize(XMVectorSubtract(camera_ray.position, address));
+			XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
+			XMVECTOR shadow = XMVectorSplatOne();
+
+			if (USE_AMBIENT)
+			{
+				// add ambient component
+				const XMVECTOR materialAmbient = XMLoadFloat3(&p.point.ambient);
+				const XMVECTOR ambientComponent = XMColorModulate(l.ambient, materialAmbient);
+				output = XMVectorAdd(output, ambientComponent);
+			}
+
+			// skip backfaces during lighting
+			if (XMVectorGetX(XMVector3Dot(lightDir, surfaceNormal)) < 0.0f)
+			{
+				continue;
+			}
+
+			// trace shadow
+			const XMVECTOR offsetPosition = XMVectorAdd(address, XMVectorScale(surfaceNormal, 0.001f));
+			ray lightRay(address, lightDir);
+			payload shadowPayload;
+			const bool bIsShadow = trace_ray(lightRay, XMVectorGetX(XMVector3Length(lightVector)), 0.0001f,
+											 shadowPayload, true);
+			if (bIsShadow)
+			{
+				shadow = XMVectorReplicate(0.5f);
+				shadow = XMVectorClamp(shadow, XMVectorZero(), XMVectorSplatOne());
+			}
+
+			if (USE_DIFFUSE)
+			{
+				// add diffuse component
+				const XMVECTOR materialDiffuse = XMLoadFloat3(&p.point.diffuse);
+				XMVECTOR diffuseComponent = XMVectorDotUnsigned(lightDir, surfaceNormal);
+				diffuseComponent = XMColorModulate(diffuseComponent, l.duffuse);
+				diffuseComponent = XMColorModulate(diffuseComponent, shadow);
+				diffuseComponent = XMColorModulate(diffuseComponent, materialDiffuse);
+
+				output = XMVectorAdd(output, diffuseComponent);
+			}
+
+			// add specular component
+			if (!bIsShadow && USE_SPECULAR)
+			{
+				// Cornell box does not have material specular value
+				//const XMVECTOR materialSpecular = XMLoadFloat3(&p.point.specular);
+				const XMVECTOR materialSpecular = XMVectorSplatOne();
+				XMVECTOR specularComponent;
+				if (USE_BLINN_LIGHTING)
+				{
+					shininess = XMVectorScale(shininess, 0.25f);
+					const XMVECTOR halfDir = XMVector3Normalize(XMVectorAdd(lightDir, cameraDir));
+					specularComponent = XMVectorDotUnsigned(surfaceNormal, halfDir);
+				}
+				else
+				{
+					specularComponent = XMVectorDotUnsigned(reflectedLight, cameraDir);
+				}
+				specularComponent = XMVectorPow(specularComponent, shininess);
+				specularComponent = XMColorModulate(specularComponent, materialSpecular);
+				specularComponent = XMColorModulate(specularComponent, l.specular);
+				output = XMVectorAdd(output, specularComponent);
+			}
+		}
+		return output;
+	}
+
+	template<typename VB, typename RT>
+	DirectX::XMVECTOR raytracer<VB, RT>::miss_shader(const payload& p, const ray& camera_ray) 
+	{
+		// miss shader
+		// WARNING: RENDERING BOT SKY GRID AND FLOOR GRID IS NOT RECOMMENDED
+		// THEY OVERLAP EACH OTHER AND LOOK UGLY:)
+		//
+		// ALSO: GRID AND AXES ARE NOT AFFECTED BY TAA BECAUSE THEY ARE
+		// RENDERED MATHEMATICALLY
+
+		DirectX::XMVECTOR output = DirectX::XMVectorZero();
+		if (render_axes(camera_ray, output))
+		{
+			return output;
+		}
+		if (render_floor_grid(camera_ray, output))
+		{
+			return output;
+		}
+		//if (render_sky_grid(camera_ray, output))
+		//{
+		//	return output;
+		//}
+		return output;
 	}
 
 	template <typename VB, typename RT>
-	bool raytracer<VB, RT>::render_floor_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	bool raytracer<VB, RT>::render_floor_grid(const ray& camera_ray, DirectX::XMVECTOR& output)
 	{
 		using namespace DirectX;
 		constexpr float thickness = 0.002f;
 		constexpr float gridRadius = 8.0f; // in units
-		if (!IsEqual(XMVectorGetY(dir), 0.0f))
+		if (!IsEqual(XMVectorGetY(camera_ray.direction), 0.0f))
 		{
-			const float t = -XMVectorGetY(eye) / XMVectorGetY(dir);
+			const float t = -XMVectorGetY(camera_ray.position) / XMVectorGetY(camera_ray.direction);
 			if (t >= 0.0f)
 			{
-				const XMVECTOR floorHit = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const XMVECTOR floorHit = XMVectorAdd(camera_ray.position, XMVectorScale(camera_ray.direction, t));
 				const float floorX = XMVectorGetX(floorHit);
 				const float floorZ = XMVectorGetZ(floorHit);
 				if (floorX >= -gridRadius && floorX <= gridRadius)
@@ -523,7 +483,7 @@ namespace cg::renderer
 						if (IsEqual(floorX, std::round(floorX), thickness * t) ||
 							IsEqual(floorZ, std::round(floorZ), thickness * t))
 						{
-							render_target->item(x, y) = unsigned_color::from_float3(float3(0.48f, 0.48f, 0.48f));
+							output = XMVectorSet(0.48f, 0.48f, 0.48f, 1.0f);
 							return true;
 						}
 					}
@@ -534,48 +494,48 @@ namespace cg::renderer
 	}
 
 	template <typename VB, typename RT>
-	bool raytracer<VB, RT>::render_axes(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	bool raytracer<VB, RT>::render_axes(const ray& camera_ray, DirectX::XMVECTOR& output)
 	{
 		using namespace DirectX;
 		constexpr float thickness = 0.003f;
-		if (!IsEqual(XMVectorGetY(dir), 0.0f)) // X-axis, red
+		if (!IsEqual(XMVectorGetY(camera_ray.direction), 0.0f)) // X-axis, red
 		{
-			const float t = -XMVectorGetY(eye) / XMVectorGetY(dir);
+			const float t = -XMVectorGetY(camera_ray.position) / XMVectorGetY(camera_ray.direction);
 			if (t >= 0.0f)
 			{
-				const XMVECTOR planeXZ = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const XMVECTOR planeXZ = XMVectorAdd(camera_ray.position, XMVectorScale(camera_ray.direction, t));
 				const float axisZ = XMVectorGetZ(planeXZ);
 				if (IsEqual(axisZ, 0.0f, thickness * t))
 				{
-					render_target->item(x, y) = unsigned_color::from_float3(float3(0.96f, 0.21f, 0.32f));
+					output = XMVectorSet(0.96f, 0.21f, 0.32f, 1.0f);
 					return true;
 				}
 			}
 		}
-		if (!IsEqual(XMVectorGetZ(dir), 0.0f)) // Y-axis, green
+		if (!IsEqual(XMVectorGetZ(camera_ray.direction), 0.0f)) // Y-axis, green
 		{
-			const float t = -XMVectorGetZ(eye) / XMVectorGetZ(dir);
+			const float t = -XMVectorGetZ(camera_ray.position) / XMVectorGetZ(camera_ray.direction);
 			if (t >= 0.0f)
 			{
-				const XMVECTOR planeXY = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const XMVECTOR planeXY = XMVectorAdd(camera_ray.position, XMVectorScale(camera_ray.direction, t));
 				const float axisX = XMVectorGetX(planeXY);
 				if (IsEqual(axisX, 0.0f, thickness * t))
 				{
-					render_target->item(x, y) = unsigned_color::from_float3(float3(0.54f, 0.79f, 0.13f));
+					output = XMVectorSet(0.54f, 0.79f, 0.13f, 1.0f);
 					return true;
 				}
 			}
 		}
-		if (!IsEqual(XMVectorGetX(dir), 0.0f)) // Z-axis, blue
+		if (!IsEqual(XMVectorGetX(camera_ray.direction), 0.0f)) // Z-axis, blue
 		{
-			const float t = -XMVectorGetX(eye) / XMVectorGetX(dir);
+			const float t = -XMVectorGetX(camera_ray.position) / XMVectorGetX(camera_ray.direction);
 			if (t >= 0.0f)
 			{
-				const XMVECTOR planeYZ = XMVectorAdd(eye, XMVectorScale(dir, t));
+				const XMVECTOR planeYZ = XMVectorAdd(camera_ray.position, XMVectorScale(camera_ray.direction, t));
 				const float axisY = XMVectorGetY(planeYZ);
 				if (IsEqual(axisY, 0.0f, thickness * t))
 				{
-					render_target->item(x, y) = unsigned_color::from_float3(float3(0.18f, 0.52f, 0.89f));
+					output = XMVectorSet(0.18f, 0.52f, 0.89f, 1.0f);
 					return true;
 				}
 			}
@@ -584,24 +544,24 @@ namespace cg::renderer
 	}
 
 	template<typename VB, typename RT>
-	bool raytracer<VB, RT>::render_sky_grid(size_t x, size_t y, DirectX::FXMVECTOR eye, DirectX::FXMVECTOR dir)
+	bool raytracer<VB, RT>::render_sky_grid(const ray& camera_ray, DirectX::XMVECTOR& output)
 	{
 		using namespace DirectX;
 		constexpr float thickness = 0.0075f;
 		constexpr float majorDensity = 10.0f; // every 10 degrees
 		constexpr float minorSubdiv = 5.0f; // every 10 / 5 =  every 2 degrees
 
-		if (!IsEqual(XMVectorGetY(dir), 1.0f))
+		if (!IsEqual(XMVectorGetY(camera_ray.direction), 1.0f))
 		{
-			float phi = XMConvertToDegrees(std::acos(XMVectorGetY(dir)));
-			float theta = XMConvertToDegrees(std::atan(XMVectorGetX(dir) / XMVectorGetZ(dir))) + 90.0f;
+			float phi = XMConvertToDegrees(std::acos(XMVectorGetY(camera_ray.direction)));
+			float theta = XMConvertToDegrees(std::atan(XMVectorGetX(camera_ray.direction) / XMVectorGetZ(camera_ray.direction))) + 90.0f;
 
 			phi /= majorDensity;
 			theta /= majorDensity;
 
 			if (IsEqual(phi, std::round(phi), thickness) || IsEqual(theta, std::round(theta), thickness))
 			{
-				render_target->item(x, y) = unsigned_color::from_float3(float3(0.78f, 0.78f, 0.78f));
+				output = XMVectorSet(0.78f, 0.78f, 0.78f, 1.0f);
 				return true;
 			}
 
@@ -610,7 +570,7 @@ namespace cg::renderer
 
 			if (IsEqual(phi, std::round(phi), thickness * 2) || IsEqual(theta, std::round(theta), thickness * 2))
 			{
-				render_target->item(x, y) = unsigned_color::from_float3(float3(0.6f, 0.6f, 0.6f));
+				output = XMVectorSet(0.6f, 0.6f, 0.6f, 1.0f);
 				return true;
 			}
 		}
@@ -642,23 +602,5 @@ namespace cg::renderer
 			fraction *= inv_base;
 		}
 		return result;
-	}
-
-	template <typename VB>
-	inline void aabb<VB>::add_triangle(const triangle<VB> triangle)
-	{
-		THROW_ERROR("Not implemented yet");
-	}
-
-	template <typename VB>
-	inline const std::vector<triangle<VB>>& aabb<VB>::get_triangles() const
-	{
-		THROW_ERROR("Not implemented yet");
-	}
-
-	template <typename VB>
-	inline bool aabb<VB>::aabb_test(const ray& ray) const
-	{
-		THROW_ERROR("Not implemented yet");
 	}
 } // namespace cg::renderer
