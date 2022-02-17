@@ -121,17 +121,15 @@ namespace cg::renderer
 			std::array<float3, 3> vertices;
 			for (size_t i = 0; i != 3; ++i) {
 				face[i] = vertex_shader(face[i]);
-				vertices[i].x = face[i].x;
-				vertices[i].y = face[i].y;
-				vertices[i].z = face[i].z;
+				vertices[i] = float3(&face[i].position.x);
 			}
 
 			// Calculating rendering domain
 			float ymin = std::min_element(vertices.begin(), vertices.end(), [](float3 a, float3 b) { return a.y < b.y; })->y;
 			float ymax = std::max_element(vertices.begin(), vertices.end(), [](float3 a, float3 b) { return a.y < b.y; })->y;
 
-			ymin = (ymin + 1) / 2 * (height - 1);
-			ymax = (ymax + 1) / 2 * (height - 1);
+			//ymin = (ymin + 1) / 2 * (height - 1);
+			//ymax = (ymax + 1) / 2 * (height - 1);
 
 			int yfrom = (std::clamp(static_cast<int>(std::ceil(ymin)), 0, static_cast<int>(height - 1)));
 			int yto = (std::clamp(static_cast<int>(std::ceil(ymax)), 0, static_cast<int>(height - 1)));
@@ -139,8 +137,8 @@ namespace cg::renderer
 			float xmin = std::min_element(vertices.begin(), vertices.end(), [](float3 a, float3 b) { return a.x < b.x; })->x;
 			float xmax = std::max_element(vertices.begin(), vertices.end(), [](float3 a, float3 b) { return a.x < b.x; })->x;
 
-			xmin = (xmin + 1) / 2 * (width - 1);
-			xmax = (xmax + 1) / 2 * (width - 1);
+			//xmin = (xmin + 1) / 2 * (width - 1);
+			//xmax = (xmax + 1) / 2 * (width - 1);
 			
 			int xfrom = (std::clamp(static_cast<int>(std::ceil(xmin)), 0, static_cast<int>(width - 1)));
 			int xto = (std::clamp(static_cast<int>(std::ceil(xmax)), 0, static_cast<int>(width - 1)));
@@ -152,8 +150,8 @@ namespace cg::renderer
 				for (int x = xfrom; x < xto; ++x) {
 
 					// Calculate pixel baricentric coordinates
-					float xf = static_cast<float>(x) / (width - 1) * 2 - 1;
-					float yf = static_cast<float>(y) / (height - 1) * 2 - 1;
+					float xf = static_cast<float>(x);
+					float yf = static_cast<float>(y);
 					float3 current_point{static_cast<float>(xf), static_cast<float>(yf), 0.0f};
 
 					float u = abs(cross(vertices[1] - current_point, vertices[2] - current_point).z) / area_twice;
@@ -176,10 +174,10 @@ namespace cg::renderer
 					}
 
 					// Depth test
-					if (depth_test(pixel_data.z, x, y)) {
+					if (depth_test(pixel_data.position.z, x, y)) {
 						// Update depth buffer
 						float& depth = depth_buffer->item(x, y);
-						depth = pixel_data.z;
+						depth = pixel_data.position.z;
 
 						// PS STAGE: Execute pixel shader
 						color pixel_value = pixel_shader(pixel_data, u * u + v * v + w * w, depth);
@@ -202,7 +200,7 @@ namespace cg::renderer
 	{
 		// Depth buffer stores inverse value of depth for better precision
 		// Hence, depth test operation is inverted
-		return z > depth_buffer->item(x, y);
+		return z < depth_buffer->item(x, y);
 	}
 
 }// namespace cg::renderer
