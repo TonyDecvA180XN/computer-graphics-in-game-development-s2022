@@ -153,6 +153,11 @@ namespace cg
 		unsigned char b;
 	};
 
+	struct d3d_vertex
+	{
+		DirectX::XMFLOAT3 position;
+		DirectX::XMFLOAT4 color;
+	};
 
 	struct vertex
 	{
