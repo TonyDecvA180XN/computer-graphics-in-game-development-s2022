@@ -10,7 +10,7 @@
 #include <DirectXMath.h>
 #include <Windows.h>
 #include <d3dx12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 #include <exception>
 #include <initguid.h>
 #include <iostream>
@@ -36,11 +36,13 @@ namespace cg::renderer
 		// Pipeline objects.
 		ComPtr<ID3D12Device> device;
 		ComPtr<ID3D12CommandQueue> command_queue;
-		ComPtr<IDXGISwapChain3> swap_chain;
+		ComPtr<IDXGISwapChain> swap_chain;
 		ComPtr<ID3D12DescriptorHeap> rtv_heap;
+		ComPtr<ID3D12DescriptorHeap> dsv_heap;
 		ComPtr<ID3D12DescriptorHeap> cbv_heap;
 		UINT rtv_descriptor_size;
 		ComPtr<ID3D12Resource> render_targets[frame_number];
+		ComPtr<ID3D12Resource> ds_buffer;
 		ComPtr<ID3D12CommandAllocator> command_allocators[frame_number];
 		ComPtr<ID3D12PipelineState> pipeline_state;
 		ComPtr<ID3D12GraphicsCommandList> command_list;

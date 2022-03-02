@@ -66,6 +66,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 	}
 
 	ShowWindow(hWindow, SW_MAXIMIZE);
+	hwnd = hWindow;
 
 	// Initialize the sample. OnInit is defined in each child-implementation of DXSample.
 	renderer->init();
