@@ -30,8 +30,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 
 	if (RegisterClass(&windowClass) == 0)
 	{
-		WIN_ERROR(L"Failed to register a window class: ")
-		return -1;
+		THROW_ERROR("Failed to register a window class")
 	}
 
 	RECT windowBox;
@@ -42,8 +41,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 
 	if (!AdjustWindowRect(&windowBox, windowStyle, false))
 	{
-		WIN_ERROR(L"Failed to adjust window rectangle: ")
-		return -1;
+		THROW_ERROR("Failed to adjust window rectangle")
 	}
 
 	// Create the window.
@@ -64,8 +62,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 
 	if (hWindow == nullptr)
 	{
-		WIN_ERROR(L"Failed to create a window: ")
-		return -1;
+		THROW_ERROR("Failed to create a window")
 	}
 
 	ShowWindow(hWindow, SW_MAXIMIZE);
