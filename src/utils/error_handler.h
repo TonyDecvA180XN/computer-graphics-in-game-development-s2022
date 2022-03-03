@@ -1,9 +1,13 @@
 #pragma once
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <windows.h>
 #include <comdef.h>
 #include <stdexcept>
 #include <string>
-#include <windows.h>
 
 #define THROW_ERROR(x)                            \
 	{                                             \

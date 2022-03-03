@@ -24,7 +24,7 @@ namespace DirectX
 	// Find area of parallelogram with vectors a and b as sides
 	inline XMVECTOR XMTriangleAreaTwice(FXMVECTOR a, FXMVECTOR b)
 	{
-		return XMVector3LengthEst(XMVector3Cross(a, b));
+		return XMVector3Length(XMVector3Cross(a, b));
 	}
 
 	// Calculate barycentric coordinates of a point p inside a triangle v0v1v2
@@ -61,7 +61,7 @@ namespace cg::renderer
 	{
 		ray(DirectX::FXMVECTOR pos, DirectX::FXMVECTOR dir) :
 			position(pos),
-			direction(DirectX::XMVector3NormalizeEst(dir))
+			direction(DirectX::XMVector3Normalize(dir))
 		{
 			// DONE: test DirectX::XMVector3NormalizeEst
 		}
@@ -241,7 +241,7 @@ namespace cg::renderer
 				const float fy = static_cast<float>(y);
 				const XMVECTOR pixel = XMVectorSet(fx, fy, 1.0f, 0.0f);
 				// Transform pixel point from screen space into world space far frustum plane
-				XMVECTOR pixelDir = XMVector3NormalizeEst(XMVector3Unproject(pixel,
+				XMVECTOR pixelDir = XMVector3Normalize(XMVector3Unproject(pixel,
 																		  0.0f, 0.0f, w, h,
 																		  0.0f, 1.0f,
 																		  projection,
@@ -260,7 +260,7 @@ namespace cg::renderer
 				{
 					const XMVECTOR output = miss_shader(p, r);
 					// don't overwrite my beautiful background gradient
-					if (XMVectorGetX(XMVector3LengthEst(output)) > 0)
+					if (XMVectorGetX(XMVector3Length(output)) > 0)
 					{
 						render_target->item(x, y) = unsigned_color::from_xmvector(output);
 					}
@@ -313,7 +313,7 @@ namespace cg::renderer
 				// Calculate normal for lighting
 				const XMVECTOR faceBasisX = XMVectorSubtract(triangle.at(1), triangle.at(0));
 				const XMVECTOR faceBasisY = XMVectorSubtract(triangle.at(2), triangle.at(0));
-				const XMVECTOR normal = XMVector3NormalizeEst(XMVector3Cross(faceBasisY, faceBasisX));
+				const XMVECTOR normal = XMVector3Normalize(XMVector3Cross(faceBasisY, faceBasisX));
 
 				float t;
 				if (TriangleTests::Intersects(ray.position, ray.direction,
@@ -390,10 +390,10 @@ namespace cg::renderer
 			const XMVECTOR address = XMLoadFloat3(&p.point.position);
 			const XMVECTOR surfaceNormal = XMLoadFloat3(&p.point.normal);
 			const XMVECTOR lightVector = XMVectorSubtract(l.position, address);
-			const XMVECTOR lightDir = XMVector3NormalizeEst(lightVector);
+			const XMVECTOR lightDir = XMVector3Normalize(lightVector);
 			const XMVECTOR incidentDir = XMVectorScale(lightDir, -1.0f);
 			const XMVECTOR reflectedLightDir = XMVector3Reflect(incidentDir, surfaceNormal);
-			const XMVECTOR cameraDir = XMVector3NormalizeEst(XMVectorSubtract(camera_ray.position, address));
+			const XMVECTOR cameraDir = XMVector3Normalize(XMVectorSubtract(camera_ray.position, address));
 			XMVECTOR shininess = XMVectorReplicate(p.point.shininess);
 			XMVECTOR shadow = XMVectorSplatOne();
 
