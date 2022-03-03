@@ -408,6 +408,10 @@ void cg::renderer::dx12_renderer::load_pipeline()
 			"COLOR", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
 			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
 		},
+		{
+			"COLOR", 3, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
 
 	};
 
@@ -420,12 +424,14 @@ void cg::renderer::dx12_renderer::load_pipeline()
 		for (size_t i = 0; i != model->get_vertex_buffers()[shape_idx]->get_number_of_elements(); ++i)
 		{
 			vertex& v = model->get_vertex_buffers()[shape_idx]->item(i);
+			DirectX::XMFLOAT3 bary(i % 3 == 0, i % 3 == 1, i % 3 == 2);
 			d3d_vertex vert = {
 				DirectX::XMFLOAT4(v.position.x, v.position.y, v.position.z, 1.0f),
 				DirectX::XMFLOAT4(v.normal.x, v.normal.y, v.normal.z, 0.0f),
 				DirectX::XMFLOAT4(v.ambient.x, v.ambient.y, v.ambient.z, 1.0f),
 				DirectX::XMFLOAT4(v.diffuse.x, v.diffuse.y, v.diffuse.z, 1.0f),
-				DirectX::XMFLOAT4(v.emissive.x, v.emissive.y, v.emissive.z, 1.0f)
+				DirectX::XMFLOAT4(v.emissive.x, v.emissive.y, v.emissive.z, 1.0f),
+				bary
 			};
 			vertices.emplace_back(vert);
 		}

@@ -160,7 +160,7 @@ namespace cg
 		DirectX::XMFLOAT4 ambient;
 		DirectX::XMFLOAT4 diffuse;
 		DirectX::XMFLOAT4 emissive;
-
+		DirectX::XMFLOAT3 bary;
 	};
 
 	struct vertex
