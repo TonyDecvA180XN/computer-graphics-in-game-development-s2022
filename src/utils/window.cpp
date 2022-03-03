@@ -9,6 +9,24 @@ HWND window::hwnd = nullptr;
 
 int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance, int ncmdshow)
 {
+	RAWINPUTDEVICE Rid[2];
+
+	Rid[0].usUsagePage = 0x01; // HID_USAGE_PAGE_GENERIC
+	Rid[0].usUsage = 0x02; // HID_USAGE_GENERIC_MOUSE
+	Rid[0].dwFlags = RIDEV_NOLEGACY; // adds mouse and also ignores legacy mouse messages
+	Rid[0].hwndTarget = 0;
+
+	Rid[1].usUsagePage = 0x01; // HID_USAGE_PAGE_GENERIC
+	Rid[1].usUsage = 0x06; // HID_USAGE_GENERIC_KEYBOARD
+	Rid[1].dwFlags = RIDEV_NOLEGACY; // adds keyboard and also ignores legacy keyboard messages
+	Rid[1].hwndTarget = 0;
+
+	if (RegisterRawInputDevices(Rid, 2, sizeof(Rid[0])) == FALSE)
+	{
+		//registration failed. Call GetLastError for the cause of the error
+		return -1;
+	}
+
 	// Register the window class.
 	LPCWSTR windowClassName = L"DirectX Sample Window Class";
 	LPCWSTR windowName = L"DirectX Sample Window";
@@ -119,43 +137,49 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 			return 0;
 		}
 
-		case WM_KEYDOWN:
+		case WM_INPUT:
 		{
-			if (renderer)
+			// The official Microsoft examples are pretty terrible about this.
+			// Size needs to be non-constant because GetRawInputData() can return the
+			// size necessary for the RAWINPUT data, which is a weird feature.
+			unsigned size = sizeof(RAWINPUT);
+			static RAWINPUT raw[sizeof(RAWINPUT)];
+			GetRawInputData((HRAWINPUT)lparam, RID_INPUT, raw, &size, sizeof(RAWINPUTHEADER));
+
+			if (raw->header.dwType == RIM_TYPEMOUSE)
 			{
-				switch (static_cast<UINT8>(wparam))
+				LONG x = raw->data.mouse.lLastX;
+				LONG y = raw->data.mouse.lLastY;
+
+				renderer->move_yaw(0.1f * x);
+				renderer->move_pitch(-0.1f * y);
+			}
+			else if (raw->header.dwType == RIM_TYPEKEYBOARD && raw->data.keyboard.Flags == RI_KEY_MAKE)
+			{
+				switch (raw->data.keyboard.VKey)
 				{
-					case 87: // w
-						renderer->move_forward(10.f);
+					case 'W':
+						renderer->move_forward(1.f);
 						break;
-					case 83: // s
-						renderer->move_backward(10.f);
+					case 'S':
+						renderer->move_backward(1.f);
 						break;
-					case 68: // d
-						renderer->move_right(10.f);
+					case 'D':
+						renderer->move_right(1.f);
 						break;
-					case 65: // a
-						renderer->move_left(10.f);
+					case 'A':
+						renderer->move_left(1.f);
+						break;
+					case VK_ESCAPE:
+						PostQuitMessage(0);
+						break;
+					default:
 						break;
 				}
+
 			}
 			return 0;
 		}
-
-		case WM_MOUSEMOVE:
-		{
-			//if (renderer)
-			//{
-			//	short x_pos = GET_X_LPARAM(lparam);
-			//	short y_pos = GET_Y_LPARAM(lparam);
-
-			//	// TODO fixme
-			//	renderer->move_yaw((2.f * static_cast<float>(x_pos) / renderer->get_width() - 1.f) * 60.f);
-			//	renderer->move_pitch((-2.f * static_cast<float>(y_pos) / renderer->get_height() + 1.f) * 60.f);
-			//}
-			return 0;
-		}
-
 		case WM_DESTROY:
 		{
 			PostQuitMessage(0);

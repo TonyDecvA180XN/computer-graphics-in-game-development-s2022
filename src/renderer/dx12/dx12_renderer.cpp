@@ -393,53 +393,6 @@ void cg::renderer::dx12_renderer::init()
 		index_offset += static_cast<UINT>(model->get_vertex_buffers()[shape_idx]->get_number_of_elements());
 	}
 
-	//using namespace DirectX;
-
-	//struct Vertex
-	//{
-	//	XMFLOAT3 position;
-	//	XMFLOAT4 color;
-	//};
-
-	//std::array<Vertex, 8> vertices =
-	//{
-	//	Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
-	//	Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Black) }),
-	//	Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Red) }),
-	//	Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
-	//	Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
-	//	Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
-	//	Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) }),
-	//	Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
-	//};
-
-	//std::array<std::uint16_t, 36> indices =
-	//{
-	//	// front face
-	//	0, 1, 2,
-	//	0, 2, 3,
-
-	//	// back face
-	//	4, 6, 5,
-	//	4, 7, 6,
-
-	//	// left face
-	//	4, 5, 1,
-	//	4, 1, 0,
-
-	//	// right face
-	//	3, 2, 6,
-	//	3, 6, 7,
-
-	//	// top face
-	//	1, 5, 6,
-	//	1, 6, 2,
-
-	//	// bottom face
-	//	4, 0, 3,
-	//	4, 3, 7
-	//};
-
 	const UINT vbByteSize = static_cast<UINT>(vertices.size()) * sizeof(d3d_vertex);
 	const UINT ibByteSize = static_cast<UINT>(indices.size()) * sizeof(UINT);
 
@@ -713,7 +666,7 @@ void cg::renderer::dx12_renderer::load_assets()
 {
 	// Make camera
 	camera = std::make_shared<world::camera>();
-	camera->set_position(float3(settings->camera_position.data()));
+	camera->set_position(DirectX::XMLoadFloat3(reinterpret_cast<DirectX::XMFLOAT3*>(settings->camera_position.data())));
 	camera->set_angle_of_view(settings->camera_angle_of_view);
 	camera->set_height(static_cast<float>(settings->height));
 	camera->set_width(static_cast<float>(settings->width));
