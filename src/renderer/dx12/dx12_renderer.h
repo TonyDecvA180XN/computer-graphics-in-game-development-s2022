@@ -6,15 +6,10 @@
 
 #include "renderer/renderer.h"
 
-#include <D3Dcompiler.h>
-#include <d3d12sdklayers.h>
 #include <DirectXMath.h>
 #include <Windows.h>
 #include <d3dx12.h>
 #include <dxgi1_6.h>
-#include <exception>
-#include <initguid.h>
-#include <iostream>
 #include <wrl.h>
 
 
@@ -41,9 +36,8 @@ namespace cg::renderer
 		ComPtr<ID3D12DescriptorHeap> rtv_heap;
 		ComPtr<ID3D12DescriptorHeap> dsv_heap;
 		ComPtr<ID3D12DescriptorHeap> cbv_heap;
-		UINT rtv_descriptor_size;
 		ComPtr<ID3D12Resource> render_targets[frame_number];
-		ComPtr<ID3D12Resource> ds_buffer;
+		ComPtr<ID3D12Resource> depth_stencil_buffer;
 		ComPtr<ID3D12CommandAllocator> command_allocator;
 		ComPtr<ID3D12PipelineState> pipeline_state;
 		ComPtr<ID3D12GraphicsCommandList> command_list;
@@ -51,36 +45,30 @@ namespace cg::renderer
 		ComPtr<ID3D12RootSignature> root_signature;
 		CD3DX12_VIEWPORT view_port;
 		CD3DX12_RECT scissor_rect;
-		UINT currentRenderTargetIdx;
+		UINT current_render_target_idx;
 
 		// Resources
 		ComPtr<ID3D12Resource> vertex_buffer;
-		D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view;
-
-		ComPtr<ID3D12Resource> VertexBufferGPU;
-		ComPtr<ID3D12Resource> IndexBufferGPU;
+		ComPtr<ID3D12Resource> index_buffer;
+		UINT vertex_stride;
+		UINT vertex_buffer_stride;
 
 		DirectX::XMFLOAT4X4 world_view_projection;
 		ComPtr<ID3D12Resource> constant_buffer;
-		UINT8* constant_buffer_data_begin;
+		UINT8* constant_buffer_location;
 
 		// Synchronization objects.
 		UINT frame_index;
 		HANDLE fence_event;
 		ComPtr<ID3D12Fence> fence;
-		UINT64 fence_values[frame_number];
 
-		UINT VertexByteStride;
-		UINT VertexBufferByteSize;
-		DXGI_FORMAT IndexFormat;
-		UINT IndexBufferByteSize;
-		UINT IndexCount;
+		UINT index_buffer_size;
+		UINT index_count;
 
 		void load_pipeline();
 		void load_assets();
 		void populate_command_list();
 
-		void move_to_next_frame();
 		void wait_for_gpu();
 	};
 } // namespace cg::renderer

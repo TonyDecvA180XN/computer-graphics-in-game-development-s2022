@@ -9,6 +9,7 @@ HWND window::hwnd = nullptr;
 
 int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance, int ncmdshow)
 {
+	// Initialize Win32 RAW INPUT because it is fast
 	RAWINPUTDEVICE Rid[2];
 
 	Rid[0].usUsagePage = 0x01; // HID_USAGE_PAGE_GENERIC
@@ -21,9 +22,8 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 	Rid[1].dwFlags = RIDEV_NOLEGACY; // adds keyboard and also ignores legacy keyboard messages
 	Rid[1].hwndTarget = 0;
 
-	if (RegisterRawInputDevices(Rid, 2, sizeof(Rid[0])) == FALSE)
+	if (RegisterRawInputDevices(Rid, 2, sizeof Rid[0]) == FALSE)
 	{
-		//registration failed. Call GetLastError for the cause of the error
 		return -1;
 	}
 
@@ -33,8 +33,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 
 	constexpr DWORD windowStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 
-	WNDCLASS windowClass{};
-
+	WNDCLASS windowClass;
 	windowClass.lpfnWndProc = window_proc;
 	windowClass.hInstance = hinstance;
 	windowClass.lpszClassName = windowClassName;
@@ -110,6 +109,7 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 	cg::renderer::renderer* renderer = reinterpret_cast<cg::renderer::renderer*>(
 		GetWindowLongPtr(hwnd, GWLP_USERDATA));
 
+	// Movement states are kept to make motion continuous
 	static float move_x = 0.0f;
 	static float move_y = 0.0f;
 	static float move_z = 0.0f;
@@ -141,12 +141,9 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 
 		case WM_INPUT:
 		{
-			// The official Microsoft examples are pretty terrible about this.
-			// Size needs to be non-constant because GetRawInputData() can return the
-			// size necessary for the RAWINPUT data, which is a weird feature.
-			unsigned size = sizeof(RAWINPUT);
+			unsigned raw_size = sizeof(RAWINPUT);
 			static RAWINPUT raw[sizeof(RAWINPUT)];
-			GetRawInputData((HRAWINPUT)lparam, RID_INPUT, raw, &size, sizeof(RAWINPUTHEADER));
+			GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, raw, &raw_size, sizeof(RAWINPUTHEADER));
 
 			if (raw->header.dwType == RIM_TYPEMOUSE)
 			{
@@ -154,7 +151,7 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 				LONG y = raw->data.mouse.lLastY;
 
 				renderer->move_yaw(0.1f * x);
-				renderer->move_pitch(-0.1f * y);
+				renderer->move_pitch(-0.1f * y); // Y-axis is inverted
 			}
 			else if (raw->header.dwType == RIM_TYPEKEYBOARD)
 			{
