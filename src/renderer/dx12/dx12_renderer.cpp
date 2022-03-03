@@ -365,23 +365,26 @@ void cg::renderer::dx12_renderer::load_pipeline()
 	// Compile vertex shader
 	ComPtr<ID3DBlob> vsByteCode = nullptr;
 	ComPtr<ID3DBlob> errors;
-	ThrowIfFailed(D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-									 "VSMain", "vs_5_0", compileFlags, 0, &vsByteCode, &errors));
+	HRESULT hr;
+	hr = D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+							"VSMain", "vs_5_0", compileFlags, 0, &vsByteCode, &errors);
 
 	if (errors != nullptr)
 	{
 		OutputDebugStringA(static_cast<char*>(errors->GetBufferPointer()));
 	}
+	ThrowIfFailed(hr);
 
 	// Compile pixel shader
 	ComPtr<ID3DBlob> psByteCode = nullptr;
-	ThrowIfFailed(D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-									 "PSMain", "ps_5_0", compileFlags, 0, &psByteCode, &errors));
+	hr = D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+							"PSMain", "ps_5_0", compileFlags, 0, &psByteCode, &errors);
 
 	if (errors != nullptr)
 	{
 		OutputDebugStringA(static_cast<char*>(errors->GetBufferPointer()));
 	}
+	ThrowIfFailed(hr);
 
 	// Fill input layout
 	std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout = {
@@ -530,7 +533,7 @@ void cg::renderer::dx12_renderer::load_pipeline()
 
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	// Cornell box is OpenGL model, so it is in RHS. I use LHS, so it is easiest way to invert face orientation
-	psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT;
+	psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	psoDesc.SampleMask = UINT_MAX;
