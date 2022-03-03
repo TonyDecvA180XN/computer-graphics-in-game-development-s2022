@@ -106,7 +106,7 @@ const DirectX::XMVECTOR cg::world::camera::get_direction() const
 
 const DirectX::XMVECTOR cg::world::camera::get_right() const
 {
-	const DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	const DirectX::XMVECTOR up = get_up();
 
 	const DirectX::XMVECTOR look = get_direction();
 	const DirectX::XMVECTOR right = DirectX::XMVector3Cross(up, look);
@@ -116,11 +116,7 @@ const DirectX::XMVECTOR cg::world::camera::get_right() const
 
 const DirectX::XMVECTOR cg::world::camera::get_up() const
 {
-	const DirectX::XMVECTOR look = get_direction();
-	const DirectX::XMVECTOR right = get_right();
-	const DirectX::XMVECTOR up = DirectX::XMVector3Cross(look, right);
-
-	return up;
+	return DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 }
 const float camera::get_theta() const
 {

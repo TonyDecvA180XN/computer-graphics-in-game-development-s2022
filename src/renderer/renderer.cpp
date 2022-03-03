@@ -78,6 +78,18 @@ void cg::renderer::renderer::move_right(float delta)
 	camera->set_position(DirectX::XMVectorAdd(camera->get_position(), right));
 }
 
+void cg::renderer::renderer::move_up(float delta)
+{
+	DirectX::XMVECTOR up = DirectX::XMVectorScale(camera->get_up(), delta);
+	camera->set_position(DirectX::XMVectorAdd(camera->get_position(), up));
+}
+
+void cg::renderer::renderer::move_down(float delta)
+{
+	DirectX::XMVECTOR up = DirectX::XMVectorScale(camera->get_right(), delta);
+	camera->set_position(DirectX::XMVectorSubtract(camera->get_position(), up));
+}
+
 void cg::renderer::renderer::move_yaw(float delta)
 {
 	camera->set_theta(camera->get_theta() + delta);

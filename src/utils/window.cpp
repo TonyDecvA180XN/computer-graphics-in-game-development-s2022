@@ -98,11 +98,6 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-		else
-		{
-			//renderer->update();
-			//renderer->render();
-		}
 	}
 
 	renderer->destroy();
@@ -114,6 +109,10 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 {
 	cg::renderer::renderer* renderer = reinterpret_cast<cg::renderer::renderer*>(
 		GetWindowLongPtr(hwnd, GWLP_USERDATA));
+
+	static float move_x = 0.0f;
+	static float move_y = 0.0f;
+	static float move_z = 0.0f;
 
 	switch (message)
 	{
@@ -131,6 +130,9 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 		{
 			if (renderer)
 			{
+				renderer->move_forward(0.01f * move_z);
+				renderer->move_right(0.01f * move_x);
+				renderer->move_up(0.01f * move_y);
 				renderer->update();
 				renderer->render();
 			}
@@ -154,29 +156,61 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 				renderer->move_yaw(0.1f * x);
 				renderer->move_pitch(-0.1f * y);
 			}
-			else if (raw->header.dwType == RIM_TYPEKEYBOARD && raw->data.keyboard.Flags == RI_KEY_MAKE)
+			else if (raw->header.dwType == RIM_TYPEKEYBOARD)
 			{
-				switch (raw->data.keyboard.VKey)
+				if (raw->data.keyboard.Flags == RI_KEY_MAKE)
 				{
-					case 'W':
-						renderer->move_forward(1.f);
-						break;
-					case 'S':
-						renderer->move_backward(1.f);
-						break;
-					case 'D':
-						renderer->move_right(1.f);
-						break;
-					case 'A':
-						renderer->move_left(1.f);
-						break;
-					case VK_ESCAPE:
-						PostQuitMessage(0);
-						break;
-					default:
-						break;
+					switch (raw->data.keyboard.VKey)
+					{
+						case 'W':
+							move_z = 1.0f;
+							break;
+						case 'S':
+							move_z = -1.0f;
+							break;
+						case 'D':
+							move_x = 1.0f;
+							break;
+						case 'A':
+							move_x = -1.0f;
+							break;
+						case 'E':
+							move_y = 1.0f;
+							break;
+						case 'Q':
+							move_y = -1.0f;
+							break;
+						case VK_ESCAPE:
+							PostQuitMessage(0);
+							break;
+						default:
+							break;
+					}
 				}
-
+				else if (raw->data.keyboard.Flags == RI_KEY_BREAK)
+				{
+					switch (raw->data.keyboard.VKey)
+					{
+						case 'W':
+							move_z = 0.0f;
+							break;
+						case 'S':
+							move_z = 0.0f;
+							break;
+						case 'D':
+							move_x = 0.0f;
+							break;
+						case 'A':
+							move_x = 0.0f;
+							break;
+						case 'E':
+							move_y = 0.0f;
+							break;
+						case 'Q':
+							move_y = 0.0f;
+							break;
+					}
+				}
 			}
 			return 0;
 		}
