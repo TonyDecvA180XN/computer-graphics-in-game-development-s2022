@@ -3,6 +3,7 @@
 #include "utils/com_error_handler.h"
 #include "utils/window.h"
 
+#include <DirectXColors.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -14,13 +15,13 @@ void cg::renderer::dx12_renderer::init()
 #if defined(_DEBUG)
 	// Enable the D3D12 debug layer.
 	ComPtr<ID3D12Debug> debugController;
-	D3D12GetDebugInterface(IID_PPV_ARGS(&debugController));
+	ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
 	debugController->EnableDebugLayer();
 	debugFlags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
 	ComPtr<IDXGIFactory4> mdxgiFactory;
-	CreateDXGIFactory2(debugFlags, IID_PPV_ARGS(&mdxgiFactory));
+	ThrowIfFailed(CreateDXGIFactory2(debugFlags, IID_PPV_ARGS(&mdxgiFactory)));
 
 	// Try to create hardware device.
 	HRESULT hardwareResult = D3D12CreateDevice(
@@ -34,16 +35,16 @@ void cg::renderer::dx12_renderer::init()
 		ComPtr<IDXGIAdapter> pWarpAdapter;
 		mdxgiFactory->EnumWarpAdapter(IID_PPV_ARGS(&pWarpAdapter));
 
-		D3D12CreateDevice(
+		ThrowIfFailed(D3D12CreateDevice(
 			pWarpAdapter.Get(),
 			D3D_FEATURE_LEVEL_11_0,
-			IID_PPV_ARGS(&device));
+			IID_PPV_ARGS(&device)));
 	}
 
-	device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
-						IID_PPV_ARGS(&fence));
+	ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+									  IID_PPV_ARGS(&fence)));
 
-	UINT mRtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	rtv_descriptor_size = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	UINT mDsvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	UINT mCbvSrvUavDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -97,24 +98,24 @@ void cg::renderer::dx12_renderer::init()
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&command_queue));
+	ThrowIfFailed(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&command_queue)));
 
-	device->CreateCommandAllocator(
+	ThrowIfFailed(device->CreateCommandAllocator(
 		D3D12_COMMAND_LIST_TYPE_DIRECT,
-		IID_PPV_ARGS(command_allocators[0].GetAddressOf()));
+		IID_PPV_ARGS(command_allocator.GetAddressOf())));
 	// TODO: command allocator
 
-	device->CreateCommandList(
+	ThrowIfFailed(device->CreateCommandList(
 		0,
 		D3D12_COMMAND_LIST_TYPE_DIRECT,
-		command_allocators[0].Get(), // Associated command allocator
+		command_allocator.Get(), // Associated command allocator
 		nullptr, // Initial PipelineStateObject
-		IID_PPV_ARGS(command_list.GetAddressOf()));
+		IID_PPV_ARGS(command_list.GetAddressOf())));
 
 	// Start off in a closed state.  This is because the first time we refer 
 	// to the command list we will Reset it, and it needs to be closed before
 	// calling Reset.
-	command_list->Close();
+	ThrowIfFailed(command_list->Close());
 
 	// Release the previous swapchain we will be recreating.
 	swap_chain.Reset();
@@ -137,10 +138,10 @@ void cg::renderer::dx12_renderer::init()
 	swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 	// Note: Swap chain uses queue to perform flush.
-	hardwareResult = mdxgiFactory->CreateSwapChain(
+	ThrowIfFailed(mdxgiFactory->CreateSwapChain(
 		command_queue.Get(),
 		&swapChainDesc,
-		swap_chain.GetAddressOf());
+		swap_chain.GetAddressOf()));
 
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
 	rtvHeapDesc.NumDescriptors = frame_number;
@@ -161,7 +162,7 @@ void cg::renderer::dx12_renderer::init()
 	// Flush before changing any resources.
 	wait_for_gpu();
 
-	command_list->Reset(command_allocators[0].Get(), nullptr);
+	command_list->Reset(command_allocator.Get(), nullptr);
 
 	// Release the previous resources we will be recreating.
 	for (int i = 0; i < frame_number; ++i)
@@ -175,7 +176,7 @@ void cg::renderer::dx12_renderer::init()
 	{
 		swap_chain->GetBuffer(i, IID_PPV_ARGS(&render_targets[i]));
 		device->CreateRenderTargetView(render_targets[i].Get(), nullptr, rtvHeapHandle);
-		rtvHeapHandle.Offset(1, mRtvDescriptorSize);
+		rtvHeapHandle.Offset(1, rtv_descriptor_size);
 	}
 
 	// Create the depth/stencil buffer and view.
@@ -198,13 +199,13 @@ void cg::renderer::dx12_renderer::init()
 	optClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	optClear.DepthStencil.Depth = 1.0f;
 	optClear.DepthStencil.Stencil = 0;
-	device->CreateCommittedResource(
+	ThrowIfFailed(device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAG_NONE,
 		&depthStencilDesc,
 		D3D12_RESOURCE_STATE_COMMON,
 		&optClear,
-		IID_PPV_ARGS(ds_buffer.GetAddressOf()));
+		IID_PPV_ARGS(ds_buffer.GetAddressOf())));
 
 	// Create descriptor to mip level 0 of entire resource using the format of the resource.
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
@@ -219,7 +220,7 @@ void cg::renderer::dx12_renderer::init()
 																		   D3D12_RESOURCE_STATE_COMMON,
 																		   D3D12_RESOURCE_STATE_DEPTH_WRITE));
 
-	command_list->Close();
+	ThrowIfFailed(command_list->Close());
 	ID3D12CommandList* commandLists[] = { command_list.Get() };
 	command_queue->ExecuteCommandLists(1, commandLists);
 
@@ -236,15 +237,15 @@ void cg::renderer::dx12_renderer::init()
 
 	scissor_rect = CD3DX12_RECT{ 0, 0, static_cast<LONG>(settings->width), static_cast<LONG>(settings->height) };
 
-	command_list->Reset(command_allocators[0].Get(), nullptr);
+	ThrowIfFailed(command_list->Reset(command_allocator.Get(), nullptr));
 
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc;
 	cbvHeapDesc.NumDescriptors = 1;
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	cbvHeapDesc.NodeMask = 0;
-	device->CreateDescriptorHeap(&cbvHeapDesc,
-								 IID_PPV_ARGS(&cbv_heap));
+	ThrowIfFailed(device->CreateDescriptorHeap(&cbvHeapDesc,
+											   IID_PPV_ARGS(&cbv_heap)));
 
 	// Constant buffer elements need to be multiples of 256 bytes.
 	// This is because the hardware can only view constant data 
@@ -256,15 +257,15 @@ void cg::renderer::dx12_renderer::init()
 	size_t elementByteSize = sizeof(DirectX::XMFLOAT4X4);
 	elementByteSize = (elementByteSize + 255) & ~255;
 
-	device->CreateCommittedResource(
+	ThrowIfFailed(device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
 		&CD3DX12_RESOURCE_DESC::Buffer(elementByteSize),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
-		IID_PPV_ARGS(&constant_buffer));
+		IID_PPV_ARGS(&constant_buffer)));
 
-	constant_buffer->Map(0, nullptr, reinterpret_cast<void**>(&constant_buffer_data_begin));
+	ThrowIfFailed(constant_buffer->Map(0, nullptr, reinterpret_cast<void**>(&constant_buffer_data_begin)));
 
 	// We do not need to unmap until we are done with the resource.  However, we must not write to
 	// the resource while it is in use by the GPU (so we must use synchronization techniques).
@@ -303,19 +304,19 @@ void cg::renderer::dx12_renderer::init()
 	// create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
 	ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
-	D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-								serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+	ThrowIfFailed(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+											  serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf()));
 
 	if (errorBlob != nullptr)
 	{
-		::OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+		OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
 	}
 
-	device->CreateRootSignature(
+	ThrowIfFailed(device->CreateRootSignature(
 		0,
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
-		IID_PPV_ARGS(&root_signature));
+		IID_PPV_ARGS(&root_signature)));
 
 	UINT compileFlags = 0;
 #if defined(DEBUG) || defined(_DEBUG)
@@ -324,8 +325,8 @@ void cg::renderer::dx12_renderer::init()
 
 	ComPtr<ID3DBlob> vsByteCode = nullptr;
 	ComPtr<ID3DBlob> errors;
-	D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-					   "VSMain", "vs_5_0", compileFlags, 0, &vsByteCode, &errors);
+	ThrowIfFailed(D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+									 "VSMain", "vs_5_0", compileFlags, 0, &vsByteCode, &errors));
 
 	if (errors != nullptr)
 	{
@@ -333,8 +334,8 @@ void cg::renderer::dx12_renderer::init()
 	}
 
 	ComPtr<ID3DBlob> psByteCode = nullptr;
-	D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-					   "PSMain", "ps_5_0", compileFlags, 0, &psByteCode, &errors);
+	ThrowIfFailed(D3DCompileFromFile(L"shaders\\shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+									 "PSMain", "ps_5_0", compileFlags, 0, &psByteCode, &errors));
 
 	if (errors != nullptr)
 	{
@@ -342,36 +343,102 @@ void cg::renderer::dx12_renderer::init()
 	}
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout = {
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 64, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{
+			"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
+		{
+			"NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
+		{
+			"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
+		{
+			"COLOR", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
+		{
+			"COLOR", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT,
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
+		},
 
 	};
 
 	load_assets();
 
 	std::vector<d3d_vertex> vertices;
-	for (auto& vb : model->get_vertex_buffers())
+	std::vector<UINT> indices;
+	UINT index_offset = 0;
+	for (size_t shape_idx = 0; shape_idx != model->get_index_buffers().size(); ++shape_idx)
 	{
-		for (size_t i = 0; i != vb->get_number_of_elements(); ++i)
+		for (size_t i = 0; i != model->get_vertex_buffers()[shape_idx]->get_number_of_elements(); ++i)
 		{
-			vertex& v = vb->item(i);
-			d3d_vertex vert = { v.position, DirectX::XMFLOAT4(v.diffuse.x, v.diffuse.y, v.diffuse.z, 0.0f) };
+			vertex& v = model->get_vertex_buffers()[shape_idx]->item(i);
+			d3d_vertex vert = {
+				DirectX::XMFLOAT4(v.position.x, v.position.y, v.position.z, 1.0f),
+				DirectX::XMFLOAT4(v.normal.x, v.normal.y, v.normal.z, 0.0f),
+				DirectX::XMFLOAT4(v.ambient.x, v.ambient.y, v.ambient.z, 1.0f),
+				DirectX::XMFLOAT4(v.diffuse.x, v.diffuse.y, v.diffuse.z, 1.0f),
+				DirectX::XMFLOAT4(v.emissive.x, v.emissive.y, v.emissive.z, 1.0f)
+			};
 			vertices.emplace_back(vert);
 		}
+		for (size_t i = 0; i != model->get_index_buffers()[shape_idx]->get_number_of_elements(); ++i)
+		{
+			UINT& ind = model->get_index_buffers()[shape_idx]->item(i);
+			indices.push_back(ind + index_offset);
+		}
+		index_offset += static_cast<UINT>(model->get_vertex_buffers()[shape_idx]->get_number_of_elements());
 	}
 
-	std::vector<UINT> indices;
-	for (auto& ib : model->get_index_buffers())
-	{
-		for (size_t i = 0; i != ib->get_number_of_elements(); ++i)
-		{
-			UINT& ind = ib->item(i);
-			indices.emplace_back(ind);
-		}
-	}
+	//using namespace DirectX;
+
+	//struct Vertex
+	//{
+	//	XMFLOAT3 position;
+	//	XMFLOAT4 color;
+	//};
+
+	//std::array<Vertex, 8> vertices =
+	//{
+	//	Vertex({ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::White) }),
+	//	Vertex({ XMFLOAT3(-1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Black) }),
+	//	Vertex({ XMFLOAT3(+1.0f, +1.0f, -1.0f), XMFLOAT4(Colors::Red) }),
+	//	Vertex({ XMFLOAT3(+1.0f, -1.0f, -1.0f), XMFLOAT4(Colors::Green) }),
+	//	Vertex({ XMFLOAT3(-1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Blue) }),
+	//	Vertex({ XMFLOAT3(-1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Yellow) }),
+	//	Vertex({ XMFLOAT3(+1.0f, +1.0f, +1.0f), XMFLOAT4(Colors::Cyan) }),
+	//	Vertex({ XMFLOAT3(+1.0f, -1.0f, +1.0f), XMFLOAT4(Colors::Magenta) })
+	//};
+
+	//std::array<std::uint16_t, 36> indices =
+	//{
+	//	// front face
+	//	0, 1, 2,
+	//	0, 2, 3,
+
+	//	// back face
+	//	4, 6, 5,
+	//	4, 7, 6,
+
+	//	// left face
+	//	4, 5, 1,
+	//	4, 1, 0,
+
+	//	// right face
+	//	3, 2, 6,
+	//	3, 6, 7,
+
+	//	// top face
+	//	1, 5, 6,
+	//	1, 6, 2,
+
+	//	// bottom face
+	//	4, 0, 3,
+	//	4, 3, 7
+	//};
 
 	const UINT vbByteSize = static_cast<UINT>(vertices.size()) * sizeof(d3d_vertex);
 	const UINT ibByteSize = static_cast<UINT>(indices.size()) * sizeof(UINT);
@@ -379,16 +446,13 @@ void cg::renderer::dx12_renderer::init()
 	ComPtr<ID3DBlob> VertexBufferCPU = nullptr;
 	ComPtr<ID3DBlob> IndexBufferCPU = nullptr;
 
-	ComPtr<ID3D12Resource> VertexBufferGPU = nullptr;
-	ComPtr<ID3D12Resource> IndexBufferGPU = nullptr;
-
 	ComPtr<ID3D12Resource> VertexBufferUploader = nullptr;
 	ComPtr<ID3D12Resource> IndexBufferUploader = nullptr;
 
-	D3DCreateBlob(vbByteSize, &VertexBufferCPU);
+	ThrowIfFailed(D3DCreateBlob(vbByteSize, &VertexBufferCPU));
 	CopyMemory(VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
 
-	D3DCreateBlob(ibByteSize, &IndexBufferCPU);
+	ThrowIfFailed(D3DCreateBlob(ibByteSize, &IndexBufferCPU));
 	CopyMemory(IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
 	//VertexBufferGPU = d3dUtil::CreateDefaultBuffer(device.Get(),
@@ -401,23 +465,23 @@ void cg::renderer::dx12_renderer::init()
 		ComPtr<ID3D12Resource> defaultBuffer;
 
 		// Create the actual default buffer resource.
-		device->CreateCommittedResource(
+		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Buffer(vbByteSize),
 			D3D12_RESOURCE_STATE_COMMON,
 			nullptr,
-			IID_PPV_ARGS(defaultBuffer.GetAddressOf()));
+			IID_PPV_ARGS(defaultBuffer.GetAddressOf())));
 
 		// In order to copy CPU memory data into our default buffer, we need to create
 		// an intermediate upload heap. 
-		device->CreateCommittedResource(
+		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Buffer(vbByteSize),
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
-			IID_PPV_ARGS(VertexBufferUploader.GetAddressOf()));
+			IID_PPV_ARGS(VertexBufferUploader.GetAddressOf())));
 
 		// Describe the data we want to copy into the default buffer.
 		D3D12_SUBRESOURCE_DATA subResourceData = {};
@@ -447,23 +511,23 @@ void cg::renderer::dx12_renderer::init()
 		ComPtr<ID3D12Resource> defaultBuffer;
 
 		// Create the actual default buffer resource.
-		device->CreateCommittedResource(
+		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Buffer(ibByteSize),
 			D3D12_RESOURCE_STATE_COMMON,
 			nullptr,
-			IID_PPV_ARGS(defaultBuffer.GetAddressOf()));
+			IID_PPV_ARGS(defaultBuffer.GetAddressOf())));
 
 		// In order to copy CPU memory data into our default buffer, we need to create
 		// an intermediate upload heap. 
-		device->CreateCommittedResource(
+		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Buffer(ibByteSize),
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
-			IID_PPV_ARGS(IndexBufferUploader.GetAddressOf()));
+			IID_PPV_ARGS(IndexBufferUploader.GetAddressOf())));
 
 		// Describe the data we want to copy into the default buffer.
 		D3D12_SUBRESOURCE_DATA subResourceData = {};
@@ -490,13 +554,13 @@ void cg::renderer::dx12_renderer::init()
 		IndexBufferGPU = defaultBuffer;
 	}
 
-	//VertexByteStride = sizeof(Vertex);
-	//VertexBufferByteSize = vbByteSize;
-	//IndexFormat = DXGI_FORMAT_R16_UINT;
-	//IndexBufferByteSize = ibByteSize;
+	VertexByteStride = sizeof(d3d_vertex);
+	VertexBufferByteSize = vbByteSize;
+	IndexFormat = DXGI_FORMAT_R32_UINT;
+	IndexBufferByteSize = ibByteSize;
 
 	//SubmeshGeometry submesh;
-	//submesh.IndexCount = (UINT)indices.size();
+	IndexCount = (UINT)indices.size();
 	//submesh.StartIndexLocation = 0;
 	//submesh.BaseVertexLocation = 0;
 
@@ -516,7 +580,9 @@ void cg::renderer::dx12_renderer::init()
 		reinterpret_cast<BYTE*>(psByteCode->GetBufferPointer()),
 		psByteCode->GetBufferSize()
 	};
+
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+	psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT; // We load OpenGL model, so its indices are in RHS, but I am lazy
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	psoDesc.SampleMask = UINT_MAX;
@@ -526,14 +592,16 @@ void cg::renderer::dx12_renderer::init()
 	psoDesc.SampleDesc.Count = 1;
 	psoDesc.SampleDesc.Quality = 0;
 	psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipeline_state));
+	ThrowIfFailed(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipeline_state)));
 
-	command_list->Close();
+	ThrowIfFailed(command_list->Close());
 
 	command_queue->ExecuteCommandLists(1, commandLists);
 
 	// Wait until initialization is complete.
 	wait_for_gpu();
+
+	currentRenderTargetIdx = 0;
 }
 
 void cg::renderer::dx12_renderer::destroy()
@@ -543,11 +611,97 @@ void cg::renderer::dx12_renderer::destroy()
 
 void cg::renderer::dx12_renderer::update()
 {
+	using namespace DirectX;
+	const XMMATRIX world = model->get_world_matrix();
+	const XMMATRIX view = camera->get_view_matrix();
+	const XMMATRIX projection = camera->get_projection_matrix();
+
+	const XMMATRIX wvp = XMMatrixMultiply(XMMatrixMultiply(world, view), projection);
+	XMStoreFloat4x4(&world_view_projection, XMMatrixTranspose(wvp));
+
+	CopyMemory(constant_buffer_data_begin, &world_view_projection, sizeof(XMFLOAT4X4));
 }
 
 void cg::renderer::dx12_renderer::render()
 {
-	THROW_ERROR("Not implemented yet")
+	// Reuse the memory associated with command recording.
+	// We can only reset when the associated command lists have finished execution on the GPU.
+	command_allocator->Reset();
+
+	// A command list can be reset after it has been added to the command queue via ExecuteCommandList.
+	// Reusing the command list reuses memory.
+	command_list->Reset(command_allocator.Get(), pipeline_state.Get());
+
+	command_list->RSSetViewports(1, &view_port);
+	command_list->RSSetScissorRects(1, &scissor_rect);
+
+	// Indicate a state transition on the resource usage.
+	command_list->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+									  render_targets[currentRenderTargetIdx].Get(),
+									  D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	// Clear the back buffer and depth buffer.
+	command_list->ClearRenderTargetView(CD3DX12_CPU_DESCRIPTOR_HANDLE(
+											rtv_heap->GetCPUDescriptorHandleForHeapStart(),
+											currentRenderTargetIdx,
+											rtv_descriptor_size), DirectX::Colors::Aqua, 0, nullptr);
+	command_list->ClearDepthStencilView(dsv_heap->GetCPUDescriptorHandleForHeapStart(),
+										D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	// Specify the buffers we are going to render to.
+	command_list->OMSetRenderTargets(1, &CD3DX12_CPU_DESCRIPTOR_HANDLE(
+										 rtv_heap->GetCPUDescriptorHandleForHeapStart(),
+										 currentRenderTargetIdx,
+										 rtv_descriptor_size), true, &dsv_heap->GetCPUDescriptorHandleForHeapStart());
+
+	ID3D12DescriptorHeap* descriptorHeaps[] = { cbv_heap.Get() };
+	command_list->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+	command_list->SetGraphicsRootSignature(root_signature.Get());
+
+	D3D12_VERTEX_BUFFER_VIEW vbv;
+	vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();
+	vbv.StrideInBytes = VertexByteStride;
+	vbv.SizeInBytes = VertexBufferByteSize;
+
+	D3D12_INDEX_BUFFER_VIEW ibv;
+	ibv.BufferLocation = IndexBufferGPU->GetGPUVirtualAddress();
+	ibv.Format = IndexFormat;
+	ibv.SizeInBytes = IndexBufferByteSize;
+
+	command_list->IASetVertexBuffers(0, 1, &vbv);
+	command_list->IASetIndexBuffer(&ibv);
+	command_list->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	command_list->SetGraphicsRootDescriptorTable(0, cbv_heap->GetGPUDescriptorHandleForHeapStart());
+
+	command_list->DrawIndexedInstanced(
+		IndexCount,
+		1, 0, 0, 0);
+
+	// Indicate a state transition on the resource usage.
+	command_list->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+									  render_targets[currentRenderTargetIdx].Get(),
+									  D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	// Done recording commands.
+	ThrowIfFailed(command_list->Close());
+
+	// Add the command list to the queue for execution.
+	ID3D12CommandList* cmdsLists[] = { command_list.Get() };
+	command_queue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+
+	// swap the back and front buffers
+	ThrowIfFailed(swap_chain->Present(1, 0));
+	//mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
+
+	// Wait until frame commands are complete.  This waiting is inefficient and is
+	// done for simplicity.  Later we will show how to organize our rendering code
+	// so we do not have to wait per frame.
+	wait_for_gpu();
+
+	// Switch to the next render target
+	currentRenderTargetIdx = ++currentRenderTargetIdx % frame_number;
 }
 
 void cg::renderer::dx12_renderer::load_pipeline()
@@ -586,12 +740,12 @@ void cg::renderer::dx12_renderer::move_to_next_frame()
 void cg::renderer::dx12_renderer::wait_for_gpu()
 {
 	// Advance the fence value to mark commands up to this fence point.
-	frame_index++;
+	++frame_index;
 
 	// Add an instruction to the command queue to set a new fence point.  Because we 
 	// are on the GPU timeline, the new fence point won't be set until the GPU finishes
 	// processing all the commands prior to this Signal().
-	command_queue->Signal(fence.Get(), frame_index);
+	ThrowIfFailed(command_queue->Signal(fence.Get(), frame_index));
 
 	// Wait until the GPU has completed commands up to this fence point.
 	if (fence->GetCompletedValue() < frame_index)
@@ -599,7 +753,7 @@ void cg::renderer::dx12_renderer::wait_for_gpu()
 		HANDLE eventHandle = CreateEventEx(nullptr, false, false, EVENT_ALL_ACCESS);
 
 		// Fire event when GPU hits current fence.  
-		fence->SetEventOnCompletion(frame_index, eventHandle);
+		ThrowIfFailed(fence->SetEventOnCompletion(frame_index, eventHandle));
 
 		// Wait until the GPU hits current fence event is fired.
 		WaitForSingleObject(eventHandle, INFINITE);

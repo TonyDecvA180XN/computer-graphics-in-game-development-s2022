@@ -14,7 +14,7 @@ PSInput VSMain(float4 position : POSITION, float4 normal: NORMAL, float4 ambient
 	PSInput result;
 
 
-	result.position = mul(mwpMatrix, position);
+	result.position = mul(position, mwpMatrix);
 	result.color = ambient;
 
 	return result;

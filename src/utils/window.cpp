@@ -57,7 +57,7 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 		nullptr, // Parent window
 		nullptr, // Menu
 		hinstance, // Instance handle
-		nullptr // Additional application data
+		renderer // Additional application data
 	);
 
 	if (hWindow == nullptr)
@@ -79,6 +79,11 @@ int cg::utils::window::run(cg::renderer::renderer* renderer, HINSTANCE hinstance
 		{
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
+		}
+		else
+		{
+			//renderer->update();
+			//renderer->render();
 		}
 	}
 
@@ -139,15 +144,15 @@ LRESULT cg::utils::window::window_proc(HWND hwnd, UINT message, WPARAM wparam, L
 
 		case WM_MOUSEMOVE:
 		{
-			if (renderer)
-			{
-				short x_pos = GET_X_LPARAM(lparam);
-				short y_pos = GET_Y_LPARAM(lparam);
+			//if (renderer)
+			//{
+			//	short x_pos = GET_X_LPARAM(lparam);
+			//	short y_pos = GET_Y_LPARAM(lparam);
 
-				// TODO fixme
-				renderer->move_yaw((2.f * static_cast<float>(x_pos) / renderer->get_width() - 1.f) * 60.f);
-				renderer->move_pitch((-2.f * static_cast<float>(y_pos) / renderer->get_height() + 1.f) * 60.f);
-			}
+			//	// TODO fixme
+			//	renderer->move_yaw((2.f * static_cast<float>(x_pos) / renderer->get_width() - 1.f) * 60.f);
+			//	renderer->move_pitch((-2.f * static_cast<float>(y_pos) / renderer->get_height() + 1.f) * 60.f);
+			//}
 			return 0;
 		}
 

@@ -155,8 +155,12 @@ namespace cg
 
 	struct d3d_vertex
 	{
-		DirectX::XMFLOAT3 position;
-		DirectX::XMFLOAT4 color;
+		DirectX::XMFLOAT4 position;
+		DirectX::XMFLOAT4 normal;
+		DirectX::XMFLOAT4 ambient;
+		DirectX::XMFLOAT4 diffuse;
+		DirectX::XMFLOAT4 emissive;
+
 	};
 
 	struct vertex
